@@ -1,5 +1,5 @@
 """
-GSC Quick View - Phase 3: Property Discovery, Persistence & Metrics Ingestion
+GSC Quick View - Phase 4: Discovery, Persistence, Metrics & Aggregation
 
 This script:
 1. Authenticates with Google Search Console API
@@ -9,7 +9,8 @@ This script:
 5. Persists websites and properties to Supabase
 6. Fetches Search Analytics metrics for all properties
 7. Persists daily metrics to Supabase
-8. Prints results for validation
+8. Computes 7-day vs 7-day comparisons
+9. Outputs JSON for frontend consumption
 
 NO UI, NO alerts yet
 """
@@ -18,14 +19,15 @@ from gsc_client import GSCClient
 from property_grouper import PropertyGrouper
 from db_persistence import DatabasePersistence
 from gsc_metrics_ingestor import GSCMetricsIngestor
+from metrics_aggregator import MetricsAggregator
 
 
 def main():
     """
-    Phase 3 entry point: GSC property discovery, grouping, persistence, and metrics ingestion
+    Phase 4 entry point: GSC property discovery, grouping, persistence, metrics ingestion, and aggregation
     """
     print("\n" + "="*80)
-    print("GSC QUICK VIEW - PHASE 3: DISCOVERY, PERSISTENCE & METRICS")
+    print("GSC QUICK VIEW - PHASE 4: DISCOVERY, PERSISTENCE, METRICS & AGGREGATION")
     print("="*80 + "\n")
     
     db = None
@@ -76,7 +78,12 @@ def main():
         ingestor = GSCMetricsIngestor(client.service, db)
         metrics_summary = ingestor.ingest_all_properties(db_properties)
         
-        print("✓ Phase 3 complete - discovery, persistence, and metrics ingestion successful\n")
+        # Step 10: Compute 7v7 comparisons
+        print("Step 9: Computing 7-day vs 7-day comparisons...")
+        aggregator = MetricsAggregator(db)
+        comparison_results = aggregator.aggregate_all_properties(db_properties)
+        
+        print("✓ Phase 4 complete - discovery, persistence, metrics, and aggregation successful\n")
     
     except Exception as e:
         print(f"\n[FATAL ERROR] {e}")
