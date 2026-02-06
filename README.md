@@ -4,22 +4,25 @@
 
 ---
 
-## Project Status: Phase 2 Complete
+## Project Status: Phase 3 Complete
 
-### Phase 2: Database Persistence ✅
+### Phase 3: Search Analytics Metrics Ingestion ✅
 
 **Implemented:**
 - Google Search Console API authentication (OAuth 2.0)
 - Property discovery via `sites.list`
 - Permission filtering (Owner/Full User only)
 - Base domain grouping logic
-- **Database persistence to Supabase**
-- **Idempotent inserts (safe to re-run)**
-- **Explicit logging for debugging**
+- Database persistence to Supabase
+- **Search Analytics metrics ingestion**
+- **Daily metrics storage (clicks, impressions, CTR, position)**
+- **Property-scoped API requests**
+- Idempotent inserts (safe to re-run)
+- Explicit logging for debugging
 - Console output for validation
 
 **NOT Implemented (future phases):**
-- Metrics collection (clicks, impressions)
+- 7-day vs 7-day comparisons (computed at read-time)
 - Scheduling/cron jobs
 - UI/dashboard
 - Alerting
@@ -87,38 +90,49 @@ python main.py
 - Authorize the application
 - Token will be saved to `token.json` for future use
 - Properties will be fetched, grouped, and persisted to database
+- **Metrics will be fetched for last ~30 days and persisted**
 
 **Subsequent runs:**
 - Uses saved token (auto-refreshes if expired)
 - Safe to re-run (idempotent inserts - no duplicates)
+- **Only new metrics are inserted (existing dates skipped)**
 
 ---
 
-## Phase 2 Output
+## Phase 3 Output
 
 The script will:
 1. Authenticate with GSC API
 2. Fetch all accessible properties
 3. Filter to Owner/Full User permissions only
 4. Group properties by base domain
-5. **Persist websites and properties to Supabase**
-6. Print grouped results and database summary to console
+5. Persist websites and properties to Supabase
+6. **Fetch Search Analytics metrics for all properties**
+7. **Persist daily metrics to Supabase**
+8. Print grouped results and database summary to console
 
 **Example output:**
 ```
-Website: example.com
-  Properties (3):
-    • sc-domain:example.com [siteOwner]
-    • https://example.com [siteOwner]
-    • https://www.example.com [siteFullUser]
+[PROPERTY] blackbrookcase.com
+  Site URL: https://blackbrookcase.com/
+  Date range: 2026-01-04 → 2026-02-03
+  ✓ 28 rows fetched
+  ✓ 14 rows inserted
+  ↺ 14 rows skipped (already exist)
 
-[INSERT] Website: example.com (id: abc-123)
-[INSERT] Property: sc-domain:example.com (type: sc_domain, permission: siteOwner)
-[INSERT] Property: https://example.com (type: url_prefix, permission: siteOwner)
-[SKIP]   Property already exists: https://www.example.com
+[PROPERTY] empanadamama.com
+  Site URL: https://www.empanadamama.com/
+  Date range: 2026-01-04 → 2026-02-03
+  ✓ 28 rows fetched
+  ✓ 28 rows inserted
 
-✓ Total websites in database: 24
-✓ Total properties in database: 26
+================================================================================
+INGESTION SUMMARY
+================================================================================
+✓ Properties processed: 26
+✓ Metric rows inserted: 364
+↺ Metric rows skipped: 112
+================================================================================
 ```
 
 ---
@@ -149,6 +163,7 @@ gsc_quickview/
 │   ├── gsc_client.py          # GSC API client
 │   ├── property_grouper.py    # Grouping logic
 │   ├── db_persistence.py      # Database persistence layer
+│   ├── gsc_metrics_ingestor.py # Metrics ingestion
 │   ├── main.py                # Entry point
 │   ├── test_grouping.py       # Validation tests
 │   ├── .env                   # Database credentials (gitignored)
@@ -164,10 +179,10 @@ gsc_quickview/
 
 ## Next Phases (Not Yet Implemented)
 
-- **Phase 3:** Metrics collection (clicks, impressions, CTR, position)
-- **Phase 4:** Daily automation
-- **Phase 5:** Dashboard UI
-- **Phase 6:** Alerting
+- **Phase 4:** 7-day vs 7-day comparison logic (computed at read-time)
+- **Phase 5:** Daily automation (cron jobs)
+- **Phase 6:** Dashboard UI
+- **Phase 7:** Alerting
 
 ---
 
@@ -189,8 +204,9 @@ gsc_quickview/
 - Append-only storage model
 
 **Current Scope:**
-- Phase 2 complete: discovery, grouping, and database persistence
-- Websites and properties stored in Supabase
+- Phase 3 complete: discovery, grouping, persistence, and metrics ingestion
+- Websites, properties, and daily metrics stored in Supabase
+- Metrics fetched for last ~30 days (today - 32 to today - 2)
 - Idempotent inserts (safe to re-run)
-- No metrics collection yet
+- No 7v7 comparisons yet (computed at read-time later)
 - No UI

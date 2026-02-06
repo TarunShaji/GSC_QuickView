@@ -250,3 +250,31 @@ class DatabasePersistence:
             print("[DB] Rolling back transaction...")
             self.rollback_transaction()
             raise RuntimeError(f"Persistence failed: {e}") from e
+    
+    def fetch_all_properties(self) -> List[Dict[str, Any]]:
+        """
+        Fetch all properties from database with their base domains
+        
+        Returns:
+            List of dictionaries with: id, site_url, base_domain, property_type, permission_level
+        """
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    p.id,
+                    p.site_url,
+                    p.property_type,
+                    p.permission_level,
+                    w.base_domain
+                FROM properties p
+                JOIN websites w ON p.website_id = w.id
+                ORDER BY w.base_domain, p.site_url
+            """)
+            
+            properties = self.cursor.fetchall()
+            return [dict(prop) for prop in properties]
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch properties: {e}")
+            raise RuntimeError(f"Database error fetching properties: {e}") from e
+
