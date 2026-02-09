@@ -30,9 +30,36 @@ from device_metrics_daily_ingestor import DeviceMetricsDailyIngestor
 from device_visibility_analyzer import DeviceVisibilityAnalyzer
 
 
-def main():
+def run_pipeline():
     """
-    Phase 6 entry point: Full pipeline with device-level visibility analysis
+    Execute the full GSC analytics pipeline.
+    
+    IMPORTANT: This function assumes GSC authentication already exists.
+    It will NOT open a browser or run OAuth flow.
+    
+    This function can be called programmatically from other Python code
+    (e.g., FastAPI endpoints, background tasks, etc.) or via the CLI.
+    
+    The pipeline:
+    1. Verifies authentication exists (raises error if not)
+    2. Fetches all accessible properties
+    3. Filters to Owner/Full User only
+    4. Groups properties by base domain
+    5. Persists websites and properties to Supabase
+    6. Ingests daily property-level metrics (today-2)
+    7. Computes 7-day vs 7-day property comparisons
+    8. Ingests daily page-level metrics (today-2)
+    9. Analyzes page visibility (new/lost/continuing pages)
+    10. Ingests daily device-level metrics (today-2)
+    11. Analyzes device visibility (desktop/mobile/tablet)
+    12. Outputs JSON for frontend consumption
+    
+    Returns:
+        None
+    
+    Raises:
+        RuntimeError: If GSC authentication does not exist
+        Exception: Any error during pipeline execution
     """
     print("\n" + "="*80)
     print("GSC QUICK VIEW - PHASE 6: FULL PIPELINE WITH DEVICE VISIBILITY")
@@ -41,10 +68,20 @@ def main():
     db = None
     
     try:
-        # Step 1: Authenticate
-        print("Step 1: Authenticating with Google Search Console API...")
+        # Step 1: Check authentication (DO NOT run OAuth)
+        print("Step 1: Checking Google Search Console authentication...")
         client = GSCClient()
-        client.authenticate()
+        
+        # Verify authentication exists
+        if not client.is_authenticated():
+            raise RuntimeError(
+                "GSC not authenticated. Please run authentication first.\n"
+                "From CLI: Authentication will be handled automatically.\n"
+                "From API: Call POST /auth/login before running the pipeline."
+            )
+        
+        # Load existing credentials and build service
+        client.authenticate()  # This will use existing token, won't open browser
         print()
         
         # Step 2: Fetch properties
@@ -122,6 +159,40 @@ def main():
         # Always close database connection
         if db:
             db.disconnect()
+
+
+def main():
+    """
+    CLI entrypoint for the pipeline.
+    
+    This function is called when running: python main.py
+    
+    Behavior:
+    1. Checks if GSC authentication exists
+    2. If not authenticated, runs OAuth flow
+    3. Then executes the full pipeline
+    
+    This preserves the existing CLI UX while maintaining
+    separation between auth and pipeline execution.
+    """
+    # Check authentication status
+    client = GSCClient()
+    
+    if not client.is_authenticated():
+        print("\n" + "="*80)
+        print("AUTHENTICATION REQUIRED")
+        print("="*80)
+        print("Google Search Console is not authenticated.")
+        print("Starting OAuth flow...\n")
+        
+        # Run OAuth flow (will open browser)
+        client.authenticate()
+        
+        print("\n✓ Authentication successful!")
+        print("="*80 + "\n")
+    
+    # Run the pipeline (assumes authentication exists)
+    run_pipeline()
 
 
 if __name__ == '__main__':

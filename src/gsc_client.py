@@ -26,10 +26,51 @@ class GSCClient:
         self.credentials = None
         self.service = None
     
+    def is_authenticated(self) -> bool:
+        """
+        Check if GSC authentication exists and is valid.
+        
+        Returns True if:
+        - token.json exists AND
+        - credentials are valid OR refreshable
+        
+        Does NOT run OAuth flow.
+        Does NOT open a browser.
+        Does NOT modify state.
+        
+        Returns:
+            bool: True if authenticated, False otherwise
+        """
+        # Check if token file exists
+        if not os.path.exists(TOKEN_FILE):
+            return False
+        
+        try:
+            # Load credentials from token file
+            credentials = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+            
+            # Check if credentials are valid or can be refreshed
+            if credentials and credentials.valid:
+                return True
+            
+            if credentials and credentials.expired and credentials.refresh_token:
+                # Has refresh token, can be refreshed
+                return True
+            
+            # Credentials exist but are invalid and cannot be refreshed
+            return False
+        
+        except Exception:
+            # Token file is corrupted or invalid
+            return False
+    
     def authenticate(self) -> None:
         """
-        Authenticate with Google Search Console API
-        Uses OAuth 2.0 flow with local token storage
+        Authenticate with Google Search Console API.
+        Uses OAuth 2.0 flow with local token storage.
+        
+        This is the ONLY method that triggers OAuth flow.
+        Call this method explicitly to run authentication.
         """
         # Check if we have existing valid credentials
         if os.path.exists(TOKEN_FILE):
@@ -41,7 +82,7 @@ class GSCClient:
                 # Refresh expired credentials
                 self.credentials.refresh(Request())
             else:
-                # Run OAuth flow
+                # Run OAuth flow (opens browser)
                 flow = InstalledAppFlow.from_client_secrets_file(
                     CLIENT_SECRET_FILE, SCOPES
                 )
@@ -54,6 +95,7 @@ class GSCClient:
         # Build the service
         self.service = build('searchconsole', 'v1', credentials=self.credentials)
         print("✓ Successfully authenticated with Google Search Console API")
+
     
     def fetch_properties(self) -> List[Dict[str, Any]]:
         """
