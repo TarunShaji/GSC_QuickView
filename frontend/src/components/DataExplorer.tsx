@@ -1,0 +1,137 @@
+import { useState, useEffect } from 'react';
+import api from '../api';
+import type { Website, Property } from '../types';
+import PropertyDashboard from './PropertyDashboard';
+
+export default function DataExplorer() {
+    const [websites, setWebsites] = useState<Website[]>([]);
+    const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
+    const [properties, setProperties] = useState<Property[]>([]);
+    const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    // Fetch websites on mount
+    useEffect(() => {
+        const fetchWebsites = async () => {
+            try {
+                setIsLoading(true);
+                const data = await api.websites.getAll();
+                setWebsites(data);
+                // Auto-select first website if available
+                if (data.length > 0) {
+                    setSelectedWebsite(data[0]);
+                }
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Failed to fetch websites');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchWebsites();
+    }, []);
+
+    // Fetch properties when website changes
+    useEffect(() => {
+        if (!selectedWebsite) {
+            setProperties([]);
+            setSelectedProperty(null);
+            return;
+        }
+
+        const fetchProperties = async () => {
+            try {
+                const data = await api.websites.getProperties(selectedWebsite.id);
+                setProperties(data);
+                // Auto-select first property
+                if (data.length > 0) {
+                    setSelectedProperty(data[0]);
+                }
+            } catch (err) {
+                console.error('Failed to fetch properties:', err);
+                setProperties([]);
+            }
+        };
+        fetchProperties();
+    }, [selectedWebsite]);
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-lg">
+                {error}
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* Website & Property Selectors */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Website Selector */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">
+                        Website
+                    </label>
+                    <select
+                        value={selectedWebsite?.id || ''}
+                        onChange={(e) => {
+                            const website = websites.find((w) => w.id === e.target.value);
+                            setSelectedWebsite(website || null);
+                            setSelectedProperty(null);
+                        }}
+                        className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                        {websites.map((website) => (
+                            <option key={website.id} value={website.id}>
+                                {website.base_domain} ({website.property_count} properties)
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* Property Selector */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">
+                        Property
+                    </label>
+                    <select
+                        value={selectedProperty?.id || ''}
+                        onChange={(e) => {
+                            const property = properties.find((p) => p.id === e.target.value);
+                            setSelectedProperty(property || null);
+                        }}
+                        disabled={properties.length === 0}
+                        className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                    >
+                        {properties.length === 0 ? (
+                            <option>No properties</option>
+                        ) : (
+                            properties.map((property) => (
+                                <option key={property.id} value={property.id}>
+                                    {property.site_url}
+                                </option>
+                            ))
+                        )}
+                    </select>
+                </div>
+            </div>
+
+            {/* Property Dashboard */}
+            {selectedProperty ? (
+                <PropertyDashboard property={selectedProperty} />
+            ) : (
+                <div className="text-center py-12 text-slate-500">
+                    Select a property to view analytics
+                </div>
+            )}
+        </div>
+    );
+}

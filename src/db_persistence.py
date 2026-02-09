@@ -674,3 +674,181 @@ class DatabasePersistence:
             print(f"[ERROR] Failed to persist device visibility analysis: {e}")
             raise RuntimeError(f"Database error persisting device visibility: {e}") from e
 
+
+    # =========================================================================
+    # DATA EXPLORATION METHODS (Frontend APIs)
+    # =========================================================================
+
+    def fetch_all_websites(self) -> List[Dict[str, Any]]:
+        """
+        Fetch all websites from database.
+        
+        Returns:
+            List of dicts with: id, base_domain, created_at, property_count
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    w.id,
+                    w.base_domain,
+                    w.created_at,
+                    COUNT(p.id) as property_count
+                FROM websites w
+                LEFT JOIN properties p ON w.id = p.website_id
+                GROUP BY w.id, w.base_domain, w.created_at
+                ORDER BY w.base_domain
+            """)
+            
+            websites = self.cursor.fetchall()
+            return [dict(row) for row in websites]
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch websites: {e}")
+            raise RuntimeError(f"Database error fetching websites: {e}") from e
+
+
+    def fetch_properties_by_website(self, website_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch all properties for a specific website.
+        
+        Args:
+            website_id: UUID of the website
+        
+        Returns:
+            List of dicts with: id, site_url, property_type, permission_level, created_at
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    id,
+                    site_url,
+                    property_type,
+                    permission_level,
+                    created_at
+                FROM properties
+                WHERE website_id = %s
+                ORDER BY site_url
+            """, (website_id,))
+            
+            properties = self.cursor.fetchall()
+            return [dict(row) for row in properties]
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch properties: {e}")
+            raise RuntimeError(f"Database error fetching properties: {e}") from e
+
+
+    def fetch_property_daily_metrics_for_overview(self, property_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch last 14 days of property metrics for 7v7 computation.
+        
+        Args:
+            property_id: UUID of the property
+        
+        Returns:
+            List of dicts with: date, clicks, impressions, ctr, position
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    date,
+                    clicks,
+                    impressions,
+                    ctr,
+                    position
+                FROM property_daily_metrics
+                WHERE property_id = %s
+                ORDER BY date DESC
+                LIMIT 14
+            """, (property_id,))
+            
+            metrics = self.cursor.fetchall()
+            return [dict(row) for row in metrics]
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch property metrics: {e}")
+            raise RuntimeError(f"Database error fetching property metrics: {e}") from e
+
+
+    def fetch_page_visibility_analysis(self, property_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch page visibility analysis for a property.
+        
+        Args:
+            property_id: UUID of the property
+        
+        Returns:
+            List of dicts with: category, page_url, impressions_last_7, 
+                               impressions_prev_7, delta, delta_pct
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    category,
+                    page_url,
+                    impressions_last_7,
+                    impressions_prev_7,
+                    delta,
+                    delta_pct,
+                    created_at
+                FROM page_visibility_analysis
+                WHERE property_id = %s
+                ORDER BY category, delta DESC
+            """, (property_id,))
+            
+            analysis = self.cursor.fetchall()
+            return [dict(row) for row in analysis]
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch page visibility: {e}")
+            raise RuntimeError(f"Database error fetching page visibility: {e}") from e
+
+
+    def fetch_device_visibility_analysis(self, property_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch device visibility analysis for a property.
+        
+        Args:
+            property_id: UUID of the property
+        
+        Returns:
+            List of dicts with: device, last_7_impressions, prev_7_impressions,
+                               delta, delta_pct, classification
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    device,
+                    last_7_impressions,
+                    prev_7_impressions,
+                    delta,
+                    delta_pct,
+                    classification,
+                    created_at
+                FROM device_visibility_analysis
+                WHERE property_id = %s
+                ORDER BY device
+            """, (property_id,))
+            
+            analysis = self.cursor.fetchall()
+            return [dict(row) for row in analysis]
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch device visibility: {e}")
+            raise RuntimeError(f"Database error fetching device visibility: {e}") from e
+
