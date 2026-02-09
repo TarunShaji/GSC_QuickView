@@ -411,4 +411,100 @@ class DatabasePersistence:
         except psycopg2.Error as e:
             print(f"[ERROR] Failed to count page metrics: {e}")
             raise RuntimeError(f"Database error counting page metrics: {e}") from e
+    
+    # ========================================
+    # PHASE 6: DEVICE METRICS PERSISTENCE
+    # ========================================
+    
+    def persist_device_metrics(self, property_id: str, device_metrics: List[Dict[str, Any]]) -> Dict[str, int]:
+        """
+        Insert or update device metrics for a property
+        Uses ON CONFLICT DO UPDATE to handle GSC data revisions
+        
+        Args:
+            property_id: UUID of the property
+            device_metrics: List of dicts with keys: device, date, clicks, impressions, ctr, position
+        
+        Returns:
+            Dictionary with counts: {'inserted': N, 'updated': M}
+        """
+        if not device_metrics:
+            return {'inserted': 0, 'updated': 0}
+        
+        inserted_count = 0
+        updated_count = 0
+        
+        try:
+            for metric in device_metrics:
+                # Insert with ON CONFLICT DO UPDATE
+                self.cursor.execute("""
+                    INSERT INTO device_daily_metrics 
+                        (property_id, device, date, clicks, impressions, ctr, position, created_at, updated_at)
+                    VALUES 
+                        (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                    ON CONFLICT (property_id, device, date) 
+                    DO UPDATE SET
+                        clicks = EXCLUDED.clicks,
+                        impressions = EXCLUDED.impressions,
+                        ctr = EXCLUDED.ctr,
+                        position = EXCLUDED.position,
+                        updated_at = NOW()
+                    RETURNING (xmax = 0) AS inserted
+                """, (
+                    property_id,
+                    metric['device'],
+                    metric['date'],
+                    metric['clicks'],
+                    metric['impressions'],
+                    metric['ctr'],
+                    metric['position']
+                ))
+                
+                result = self.cursor.fetchone()
+                if result and result['inserted']:
+                    inserted_count += 1
+                else:
+                    updated_count += 1
+            
+            return {
+                'inserted': inserted_count,
+                'updated': updated_count
+            }
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to persist device metrics: {e}")
+            raise RuntimeError(f"Database error persisting device metrics: {e}") from e
+    
+    def fetch_device_metrics_last_14_days(self, property_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch last 14 days of device metrics for a property
+        
+        Args:
+            property_id: UUID of the property
+        
+        Returns:
+            List of dicts with device, date, clicks, impressions, ctr, position
+        """
+        try:
+            # Fetch last 14 days (max 42 rows: 14 days * 3 devices)
+            self.cursor.execute("""
+                SELECT 
+                    device,
+                    date,
+                    clicks,
+                    impressions,
+                    ctr,
+                    position
+                FROM device_daily_metrics
+                WHERE property_id = %s
+                ORDER BY date DESC
+                LIMIT 42
+            """, (property_id,))
+            
+            metrics = self.cursor.fetchall()
+            return [dict(metric) for metric in metrics]
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch device metrics: {e}")
+            raise RuntimeError(f"Database error fetching device metrics: {e}") from e
 

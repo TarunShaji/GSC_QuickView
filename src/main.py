@@ -1,5 +1,5 @@
 """
-GSC Quick View - Phase 5: Full Pipeline with Page-Level Visibility
+GSC Quick View - Phase 6: Full Pipeline with Device-Level Visibility
 
 This script:
 1. Authenticates with Google Search Console API
@@ -12,7 +12,9 @@ This script:
 8. Computes 7-day vs 7-day property comparisons
 9. Ingests daily page-level metrics (today-2)
 10. Analyzes page visibility (new/lost/continuing pages)
-11. Outputs JSON for frontend consumption
+11. Ingests daily device-level metrics (today-2)
+12. Analyzes device visibility (desktop/mobile/tablet)
+13. Outputs JSON for frontend consumption
 
 NO UI, NO alerts yet
 """
@@ -24,14 +26,16 @@ from gsc_metrics_ingestor import GSCMetricsIngestor
 from metrics_aggregator import MetricsAggregator
 from page_metrics_daily_ingestor import PageMetricsDailyIngestor
 from page_visibility_analyzer import PageVisibilityAnalyzer
+from device_metrics_daily_ingestor import DeviceMetricsDailyIngestor
+from device_visibility_analyzer import DeviceVisibilityAnalyzer
 
 
 def main():
     """
-    Phase 5 entry point: Full pipeline with page-level visibility analysis
+    Phase 6 entry point: Full pipeline with device-level visibility analysis
     """
     print("\n" + "="*80)
-    print("GSC QUICK VIEW - PHASE 5: FULL PIPELINE WITH PAGE VISIBILITY")
+    print("GSC QUICK VIEW - PHASE 6: FULL PIPELINE WITH DEVICE VISIBILITY")
     print("="*80 + "\n")
     
     db = None
@@ -97,7 +101,17 @@ def main():
         visibility_analyzer = PageVisibilityAnalyzer(db)
         visibility_results = visibility_analyzer.analyze_all_properties(db_properties)
         
-        print("✓ Phase 5 complete - full pipeline with page visibility analysis successful\n")
+        # Step 13: Ingest daily device metrics
+        print("Step 12: Ingesting daily device metrics...")
+        device_ingestor = DeviceMetricsDailyIngestor(client.service, db)
+        device_ingestor.ingest_all_properties(db_properties)
+        
+        # Step 14: Analyze device visibility
+        print("Step 13: Analyzing device visibility...")
+        device_analyzer = DeviceVisibilityAnalyzer(db)
+        device_analyzer.analyze_all_properties(db_properties)
+        
+        print("✓ Phase 6 complete - full pipeline with device visibility analysis successful\n")
     
     except Exception as e:
         print(f"\n[FATAL ERROR] {e}")

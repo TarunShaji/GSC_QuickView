@@ -43,3 +43,9 @@ credentials.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Outputs
+outputs/
+
+# Demo
+seo_health_demo.html
