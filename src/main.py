@@ -22,7 +22,7 @@ NO UI, NO alerts yet
 from gsc_client import GSCClient
 from property_grouper import PropertyGrouper
 from db_persistence import DatabasePersistence
-from gsc_metrics_ingestor import GSCMetricsIngestor
+from property_metrics_daily_ingestor import PropertyMetricsDailyIngestor
 from metrics_aggregator import MetricsAggregator
 from page_metrics_daily_ingestor import PageMetricsDailyIngestor
 from page_visibility_analyzer import PageVisibilityAnalyzer
@@ -81,10 +81,10 @@ def main():
         db_properties = db.fetch_all_properties()
         print(f"✓ Retrieved {len(db_properties)} properties from database\n")
         
-        # Step 9: Ingest Search Analytics metrics
-        print("Step 8: Ingesting Search Analytics metrics...")
-        ingestor = GSCMetricsIngestor(client.service, db)
-        metrics_summary = ingestor.ingest_all_properties(db_properties)
+        # Step 9: Ingest property-level daily metrics (today-2)
+        print("Step 8: Ingesting property-level daily metrics...")
+        property_ingestor = PropertyMetricsDailyIngestor(client.service, db)
+        property_ingestor.ingest_all_properties(db_properties)
         
         # Step 10: Compute 7v7 property comparisons
         print("Step 9: Computing 7-day vs 7-day property comparisons...")
