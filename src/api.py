@@ -74,6 +74,23 @@ def auth_login():
 # Pipeline
 # -------------------------
 
+@app.get("/pipeline/status")
+def pipeline_status():
+    """
+    Get current pipeline execution status.
+    
+    Returns real-time state for frontend polling:
+    - is_running: boolean
+    - phase: "idle" | "ingestion" | "analysis" | "completed" | "failed"
+    - current_step: description of current operation
+    - progress: {"current": int, "total": int} for progress bar
+    - completed_steps: list of completed step names
+    - error: error message if failed, else null
+    - started_at: ISO timestamp when pipeline started
+    """
+    from main import PIPELINE_STATE
+    return PIPELINE_STATE
+
 @app.post("/pipeline/run")
 def run_pipeline_endpoint():
     """

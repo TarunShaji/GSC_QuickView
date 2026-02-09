@@ -1,6 +1,16 @@
 """
-Metrics Aggregator - Phase 4
-Computes 7-day vs 7-day comparisons from stored metrics
+Property 7v7 Comparison (Computed Intelligence)
+
+This module computes property-level 7-day vs previous 7-day comparisons.
+
+IMPORTANT:
+- This is NO LONGER called by the pipeline
+- This data is NOT persisted to the database
+- It will be computed on-demand via the API endpoint:
+    GET /properties/{id}/overview
+
+- The logic in this file will be reused by the API layer
+- JSON output is for CLI/debugging only
 """
 
 import json

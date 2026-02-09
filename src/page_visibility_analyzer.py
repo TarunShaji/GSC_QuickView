@@ -329,7 +329,7 @@ class PageVisibilityAnalyzer:
     
     def analyze_all_properties(self, properties: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Analyze all properties and save JSON output
+        Analyze all properties and persist results to database.
         
         Args:
             properties: List of property dicts from database
@@ -353,7 +353,24 @@ class PageVisibilityAnalyzer:
             result = self.analyze_property(prop)
             results.append(result)
             
+            # Persist to database (primary output)
             if not result['insufficient_data']:
+                self.db.persist_page_visibility_analysis(
+    property_id=prop['id'],
+    analysis_results={
+        'new_pages': result['details']['new_pages'],
+        'lost_pages': result['details']['lost_pages'],
+        'significant_drops': [
+            p for p in result['details']['continuing_with_deltas']
+            if p['classification'] == 'significant_drop'
+        ],
+        'significant_gains': [
+            p for p in result['details']['continuing_with_deltas']
+            if p['classification'] == 'significant_gain'
+        ]
+    }
+)
+                
                 total_new += result['summary']['new_pages']
                 total_lost += result['summary']['lost_pages']
                 total_drops += result['summary']['significant_drops']
@@ -370,7 +387,7 @@ class PageVisibilityAnalyzer:
         print(f"✓ Total significant gains: {total_gains}")
         print("="*80 + "\n")
         
-        # Save JSON output
+        # Optional: Save JSON output for CLI/debugging
         output_dir = os.path.join(os.path.dirname(__file__), '..', 'outputs')
         os.makedirs(output_dir, exist_ok=True)
         output_file = os.path.join(output_dir, 'page_visibility_analysis.json')
@@ -388,6 +405,6 @@ class PageVisibilityAnalyzer:
         with open(output_file, 'w') as f:
             json.dump(output_data, f, indent=2, default=str)
         
-        print(f"[OUTPUT] JSON saved to: {output_file}\n")
+        print(f"[DEBUG] JSON saved to: {output_file}\n")
         
         return output_data

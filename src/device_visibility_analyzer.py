@@ -223,7 +223,7 @@ class DeviceVisibilityAnalyzer:
     
     def analyze_all_properties(self, properties: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Analyze device visibility for all properties
+        Analyze device visibility for all properties and persist to database.
         
         Returns:
             Complete analysis results with summary and details
@@ -243,8 +243,20 @@ class DeviceVisibilityAnalyzer:
             result = self.analyze_property(prop)
             results.append(result)
             
-            # Count drops and gains
+            # Persist to database (primary output)
             if not result.get('insufficient_data', False):
+                # Extract device data for persistence
+                device_analysis = {}
+                for device in ['mobile', 'desktop', 'tablet']:
+                    if device in result['details']: # Corrected to access 'details' key
+                        device_analysis[device] = result['details'][device] # Corrected to access 'details' key
+                
+                self.db.persist_device_visibility_analysis(
+                    property_id=prop['id'],
+                    analysis_results=device_analysis
+                )
+                
+                # Count drops and gains
                 summary = result.get('summary', {})
                 for device, classification in summary.items():
                     if classification == 'significant_drop':
@@ -261,7 +273,7 @@ class DeviceVisibilityAnalyzer:
         print(f"🟢 Total significant gains: {total_gains}")
         print("="*80 + "\n")
         
-        # Save to JSON
+        # Optional: Save to JSON for CLI/debugging
         output_dir = os.path.join(os.path.dirname(__file__), '..', 'outputs')
         os.makedirs(output_dir, exist_ok=True)
         output_file = os.path.join(output_dir, 'device_visibility_analysis.json')
@@ -278,6 +290,6 @@ class DeviceVisibilityAnalyzer:
         with open(output_file, 'w') as f:
             json.dump(output_data, f, indent=2)
         
-        print(f"[OUTPUT] JSON saved to: {output_file}\n")
+        print(f"[DEBUG] JSON saved to: {output_file}\n")
         
         return output_data

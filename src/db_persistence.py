@@ -508,3 +508,169 @@ class DatabasePersistence:
             print(f"[ERROR] Failed to fetch device metrics: {e}")
             raise RuntimeError(f"Database error fetching device metrics: {e}") from e
 
+
+    def persist_page_visibility_analysis(self, property_id: str, analysis_results: dict) -> int:
+        """
+        Persist page visibility analysis to page_visibility_analysis table.
+        
+        Strategy:
+        - Delete existing records for property_id (idempotent)
+        - Batch insert new records
+        - Return count of inserted rows
+        
+        Args:
+            property_id: UUID of the property
+            analysis_results: Dictionary with keys: 'new_pages', 'lost_pages', 
+                            'significant_drops', 'significant_gains'
+                            Each value is a list of page dicts
+        
+        Returns:
+            Total number of rows inserted
+        
+        Schema:
+            - property_id (uuid)
+            - category (text): 'new' | 'lost' | 'drop' | 'gain'
+            - page_url (text)
+            - impressions_last_7 (int4)
+            - impressions_prev_7 (int4)
+            - delta (int4)
+            - delta_pct (numeric)
+            - created_at (timestamptz)
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            # Delete existing records for this property (idempotent)
+            self.cursor.execute("""
+                DELETE FROM page_visibility_analysis
+                WHERE property_id = %s
+            """, (property_id,))
+            
+            # Prepare batch insert data
+            rows_to_insert = []
+            
+            # Process each category
+            category_mapping = {
+                'new_pages': 'new',
+                'lost_pages': 'lost',
+                'significant_drops': 'drop',
+                'significant_gains': 'gain'
+            }
+            
+            for result_key, category in category_mapping.items():
+                pages = analysis_results.get(result_key, [])
+                for page in pages:
+                    rows_to_insert.append((
+                        property_id,
+                        category,
+                        page.get('page_url'),
+                        page.get('impressions_last_7', 0),
+                        page.get('impressions_prev_7', 0),
+                        page.get('delta', 0),
+                        page.get('delta_pct', 0.0)
+                    ))
+            
+            # Batch insert
+            if rows_to_insert:
+                execute_batch(
+                    self.cursor,
+                    """
+                    INSERT INTO page_visibility_analysis 
+                        (property_id, category, page_url, impressions_last_7, 
+                         impressions_prev_7, delta, delta_pct, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    """,
+                    rows_to_insert,
+                    page_size=100
+                )
+            
+            self.connection.commit()
+            
+            print(f"✓ Persisted {len(rows_to_insert)} page visibility records for property {property_id}")
+            return len(rows_to_insert)
+        
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to persist page visibility analysis: {e}")
+            raise RuntimeError(f"Database error persisting page visibility: {e}") from e
+
+
+    def persist_device_visibility_analysis(self, property_id: str, analysis_results: dict) -> int:
+        """
+        Persist device visibility to device_visibility_analysis table.
+        
+        Strategy:
+        - Delete existing records for property_id (idempotent)
+        - Batch insert new records
+        - Return count of inserted rows
+        
+        Args:
+            property_id: UUID of the property
+            analysis_results: Dictionary with device keys ('mobile', 'desktop', 'tablet')
+                            Each value is a dict with analysis data
+        
+        Returns:
+            Total number of rows inserted
+        
+        Schema:
+            - property_id (uuid)
+            - device (text): 'mobile' | 'desktop' | 'tablet'
+            - last_7_impressions (int4)
+            - prev_7_impressions (int4)
+            - delta (int4)
+            - delta_pct (numeric)
+            - classification (text): 'significant_drop' | 'significant_gain' | 'flat'
+            - created_at (timestamptz)
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            # Delete existing records for this property (idempotent)
+            self.cursor.execute("""
+                DELETE FROM device_visibility_analysis
+                WHERE property_id = %s
+            """, (property_id,))
+            
+            # Prepare batch insert data
+            rows_to_insert = []
+            
+            # Process each device
+            for device in ['mobile', 'desktop', 'tablet']:
+                device_data = analysis_results.get(device, {})
+                if device_data:  # Only insert if device has data
+                    rows_to_insert.append((
+                        property_id,
+                        device,
+                        device_data.get('last_7_impressions', 0),
+                        device_data.get('prev_7_impressions', 0),
+                        device_data.get('delta', 0),
+                        device_data.get('delta_pct', 0.0),
+                        device_data.get('classification', 'flat')
+                    ))
+            
+            # Batch insert
+            if rows_to_insert:
+                execute_batch(
+                    self.cursor,
+                    """
+                    INSERT INTO device_visibility_analysis 
+                        (property_id, device, last_7_impressions, prev_7_impressions,
+                         delta, delta_pct, classification, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    """,
+                    rows_to_insert,
+                    page_size=100
+                )
+            
+            self.connection.commit()
+            
+            print(f"✓ Persisted {len(rows_to_insert)} device visibility records for property {property_id}")
+            return len(rows_to_insert)
+        
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to persist device visibility analysis: {e}")
+            raise RuntimeError(f"Database error persisting device visibility: {e}") from e
+

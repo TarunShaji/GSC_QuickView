@@ -1,5 +1,5 @@
 """
-GSC Quick View - Phase 6: Full Pipeline with Device-Level Visibility
+GSC Quick View - Sequential Ingestion + Parallel Analysis
 
 This script:
 1. Authenticates with Google Search Console API
@@ -7,27 +7,62 @@ This script:
 3. Filters to Owner/Full User only
 4. Groups properties by base domain
 5. Persists websites and properties to Supabase
-6. Fetches Search Analytics property-level metrics
-7. Persists daily property metrics to Supabase
-8. Computes 7-day vs 7-day property comparisons
-9. Ingests daily page-level metrics (today-2)
-10. Analyzes page visibility (new/lost/continuing pages)
-11. Ingests daily device-level metrics (today-2)
-12. Analyzes device visibility (desktop/mobile/tablet)
-13. Outputs JSON for frontend consumption
+6. Ingests daily metrics (property/page/device) SEQUENTIALLY
+7. Analyzes visibility (page/device) in PARALLEL
+8. Persists analysis results to database
 
-NO UI, NO alerts yet
+Architecture:
+- Phase 0 (Sequential): Auth + Property Sync
+- Phase 1 (Sequential): Property/Page/Device Ingestion (GSC API - NOT thread-safe)
+- Phase 2 (Parallel): Page/Device Analysis (DB-only - thread-safe)
+
+CRITICAL: GSC API client is NOT thread-safe. Parallel API calls cause SSL errors.
 """
 
 from gsc_client import GSCClient
 from property_grouper import PropertyGrouper
 from db_persistence import DatabasePersistence
 from property_metrics_daily_ingestor import PropertyMetricsDailyIngestor
-from metrics_aggregator import MetricsAggregator
 from page_metrics_daily_ingestor import PageMetricsDailyIngestor
-from page_visibility_analyzer import PageVisibilityAnalyzer
 from device_metrics_daily_ingestor import DeviceMetricsDailyIngestor
+from page_visibility_analyzer import PageVisibilityAnalyzer
 from device_visibility_analyzer import DeviceVisibilityAnalyzer
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from threading import Lock
+
+
+# Global pipeline state for frontend polling
+PIPELINE_LOCK = Lock()
+PIPELINE_STATE = {
+    "is_running": False,
+    "phase": "idle",  # idle | ingestion | analysis | completed | failed
+    "current_step": None,  # Current step description
+    "progress": {"current": 0, "total": 0},  # Progress tracking
+    "completed_steps": [],
+    "error": None,
+    "started_at": None
+}
+
+
+def update_pipeline_state(**kwargs):
+    """Thread-safe update of PIPELINE_STATE"""
+    with PIPELINE_LOCK:
+        for key, value in kwargs.items():
+            PIPELINE_STATE[key] = value
+
+
+def log_step(message, level="INFO"):
+    """Log with timestamp"""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    prefix = {
+        "INFO": "ℹ️ ",
+        "SUCCESS": "✅",
+        "ERROR": "❌",
+        "WARNING": "⚠️ ",
+        "PROGRESS": "⏳"
+    }.get(level, "")
+    print(f"[{timestamp}] {prefix} {message}")
 
 
 def run_pipeline():
@@ -35,24 +70,11 @@ def run_pipeline():
     Execute the full GSC analytics pipeline.
     
     IMPORTANT: This function assumes GSC authentication already exists.
-    It will NOT open a browser or run OAuth flow.
     
-    This function can be called programmatically from other Python code
-    (e.g., FastAPI endpoints, background tasks, etc.) or via the CLI.
-    
-    The pipeline:
-    1. Verifies authentication exists (raises error if not)
-    2. Fetches all accessible properties
-    3. Filters to Owner/Full User only
-    4. Groups properties by base domain
-    5. Persists websites and properties to Supabase
-    6. Ingests daily property-level metrics (today-2)
-    7. Computes 7-day vs 7-day property comparisons
-    8. Ingests daily page-level metrics (today-2)
-    9. Analyzes page visibility (new/lost/continuing pages)
-    10. Ingests daily device-level metrics (today-2)
-    11. Analyzes device visibility (desktop/mobile/tablet)
-    12. Outputs JSON for frontend consumption
+    Architecture:
+    - Phase 0 (Sequential): Auth check + Property sync
+    - Phase 1 (Sequential): Property/Page/Device ingestion (GSC API calls)
+    - Phase 2 (Parallel): Page/Device analysis (DB-only operations)
     
     Returns:
         None
@@ -61,15 +83,31 @@ def run_pipeline():
         RuntimeError: If GSC authentication does not exist
         Exception: Any error during pipeline execution
     """
-    print("\n" + "="*80)
-    print("GSC QUICK VIEW - PHASE 6: FULL PIPELINE WITH DEVICE VISIBILITY")
+    log_step("GSC QUICK VIEW - SEQUENTIAL INGESTION + PARALLEL ANALYSIS", "INFO")
     print("="*80 + "\n")
     
     db = None
     
     try:
-        # Step 1: Check authentication (DO NOT run OAuth)
-        print("Step 1: Checking Google Search Console authentication...")
+        # Initialize pipeline state
+        update_pipeline_state(
+            is_running=True,
+            phase="idle",
+            current_step=None,
+            progress={"current": 0, "total": 0},
+            completed_steps=[],
+            error=None,
+            started_at=datetime.now().isoformat()
+        )
+        
+        # ========================================================================
+        # PHASE 0: SEQUENTIAL SETUP
+        # ========================================================================
+        
+        update_pipeline_state(phase="setup", current_step="Checking GSC authentication")
+        log_step("PHASE 0: SETUP", "INFO")
+        log_step("Checking Google Search Console authentication...", "PROGRESS")
+        
         client = GSCClient()
         
         # Verify authentication exists
@@ -81,84 +119,175 @@ def run_pipeline():
             )
         
         # Load existing credentials and build service
-        client.authenticate()  # This will use existing token, won't open browser
-        print()
+        client.authenticate()
+        log_step("GSC authentication successful", "SUCCESS")
+        update_pipeline_state(completed_steps=["auth_check"])
         
-        # Step 2: Fetch properties
-        print("Step 2: Fetching GSC properties...")
+        # Property sync
+        update_pipeline_state(current_step="Fetching GSC properties")
+        log_step("Fetching GSC properties...", "PROGRESS")
         all_properties = client.fetch_properties()
-        print()
         
-        # Step 3: Filter properties
-        print("Step 3: Filtering properties (Owner/Full User only)...")
+        log_step("Filtering properties (Owner/Full User only)...", "PROGRESS")
         filtered_properties = client.filter_properties(all_properties)
-        print()
         
-        # Step 4: Group properties
-        print("Step 4: Grouping properties by base domain...")
+        log_step("Grouping properties by base domain...", "PROGRESS")
         grouper = PropertyGrouper()
         grouped_properties = grouper.group_properties(filtered_properties)
-        print(f"✓ Grouped into {len(grouped_properties)} websites")
+        log_step(f"Grouped into {len(grouped_properties)} websites", "SUCCESS")
         
-        # Step 5: Display grouped results
-        grouper.print_grouped_properties(grouped_properties)
-        
-        # Step 6: Connect to database
-        print("Step 5: Connecting to database...")
+        log_step("Connecting to database...", "PROGRESS")
         db = DatabasePersistence()
         db.connect()
-        print()
+        log_step("Database connected", "SUCCESS")
         
-        # Step 7: Persist websites and properties
-        print("Step 6: Persisting websites and properties...")
+        log_step("Persisting websites and properties...", "PROGRESS")
         counts = db.persist_grouped_properties(grouped_properties)
+        log_step(f"Persisted {counts['websites']} websites, {counts['properties']} properties", "SUCCESS")
         
-        # Step 8: Fetch all properties from database (for metrics ingestion)
-        print("Step 7: Fetching properties from database...")
+        log_step("Fetching properties from database...", "PROGRESS")
         db_properties = db.fetch_all_properties()
-        print(f"✓ Retrieved {len(db_properties)} properties from database\n")
+        log_step(f"Retrieved {len(db_properties)} properties", "SUCCESS")
+        update_pipeline_state(completed_steps=PIPELINE_STATE["completed_steps"] + ["properties_sync"])
         
-        # Step 9: Ingest property-level daily metrics (today-2)
-        print("Step 8: Ingesting property-level daily metrics...")
+        # ========================================================================
+        # PHASE 1: SEQUENTIAL INGESTION (GSC API - NOT THREAD-SAFE)
+        # ========================================================================
+        
+        print("\n" + "="*80)
+        log_step("PHASE 1: SEQUENTIAL INGESTION (GSC API calls)", "INFO")
+        log_step("⚠️  GSC API client is NOT thread-safe - running sequentially", "WARNING")
+        print("="*80 + "\n")
+        
+        update_pipeline_state(
+            phase="ingestion",
+            current_step="Ingesting metrics from GSC API",
+            progress={"current": 0, "total": len(db_properties) * 3}
+        )
+        
+        # Create ingestors (shared GSC client)
         property_ingestor = PropertyMetricsDailyIngestor(client.service, db)
-        property_ingestor.ingest_all_properties(db_properties)
-        
-        # Step 10: Compute 7v7 property comparisons
-        print("Step 9: Computing 7-day vs 7-day property comparisons...")
-        aggregator = MetricsAggregator(db)
-        comparison_results = aggregator.aggregate_all_properties(db_properties)
-        
-        # Step 11: Ingest daily page metrics (today-2)
-        print("Step 10: Ingesting daily page metrics...")
         page_ingestor = PageMetricsDailyIngestor(client.service, db)
-        page_ingestor.ingest_all_properties(db_properties)
-        
-        # Step 12: Analyze page visibility
-        print("Step 11: Analyzing page visibility...")
-        visibility_analyzer = PageVisibilityAnalyzer(db)
-        visibility_results = visibility_analyzer.analyze_all_properties(db_properties)
-        
-        # Step 13: Ingest daily device metrics
-        print("Step 12: Ingesting daily device metrics...")
         device_ingestor = DeviceMetricsDailyIngestor(client.service, db)
-        device_ingestor.ingest_all_properties(db_properties)
         
-        # Step 14: Analyze device visibility
-        print("Step 13: Analyzing device visibility...")
-        device_analyzer = DeviceVisibilityAnalyzer(db)
-        device_analyzer.analyze_all_properties(db_properties)
+        total_properties = len(db_properties)
+        current_progress = 0
         
-        print("✓ Phase 6 complete - full pipeline with device visibility analysis successful\n")
+        # Sequential ingestion for each property
+        for idx, prop in enumerate(db_properties, 1):
+            site_url = prop['site_url']
+            
+            # Property metrics
+            log_step(f"[{idx}/{total_properties}] Property metrics: {site_url}", "PROGRESS")
+            update_pipeline_state(
+                current_step=f"Property metrics [{idx}/{total_properties}]: {site_url}",
+                progress={"current": current_progress, "total": total_properties * 3}
+            )
+            property_ingestor.ingest_property_single_day(prop)
+            current_progress += 1
+            
+            # Page metrics
+            log_step(f"[{idx}/{total_properties}] Page metrics: {site_url}", "PROGRESS")
+            update_pipeline_state(
+                current_step=f"Page metrics [{idx}/{total_properties}]: {site_url}",
+                progress={"current": current_progress, "total": total_properties * 3}
+            )
+            page_ingestor.ingest_property_single_day(prop)
+            current_progress += 1
+            
+            # Device metrics
+            log_step(f"[{idx}/{total_properties}] Device metrics: {site_url}", "PROGRESS")
+            update_pipeline_state(
+                current_step=f"Device metrics [{idx}/{total_properties}]: {site_url}",
+                progress={"current": current_progress, "total": total_properties * 3}
+            )
+            device_ingestor.ingest_property_single_day(prop)
+            current_progress += 1
+        
+        log_step("All ingestion complete", "SUCCESS")
+        update_pipeline_state(
+            completed_steps=PIPELINE_STATE["completed_steps"] + ["ingestion"],
+            progress={"current": total_properties * 3, "total": total_properties * 3}
+        )
+        
+        # ========================================================================
+        # PHASE 2: PARALLEL ANALYSIS (DB-ONLY - THREAD-SAFE)
+        # ========================================================================
+        
+        print("\n" + "="*80)
+        log_step("PHASE 2: PARALLEL ANALYSIS (DB-only operations)", "INFO")
+        log_step("✅ Database operations are thread-safe - running in parallel", "SUCCESS")
+        print("="*80 + "\n")
+        
+        update_pipeline_state(
+            phase="analysis",
+            current_step="Running parallel visibility analysis"
+        )
+        
+        def analyze_page_visibility():
+            """Task: Analyze page visibility and persist to DB"""
+            db_local = DatabasePersistence()
+            db_local.connect()
+            try:
+                log_step("Starting page visibility analysis...", "PROGRESS")
+                analyzer = PageVisibilityAnalyzer(db_local)
+                analyzer.analyze_all_properties(db_properties)
+                log_step("Page visibility analysis complete", "SUCCESS")
+            finally:
+                db_local.disconnect()
+        
+        def analyze_device_visibility():
+            """Task: Analyze device visibility and persist to DB"""
+            db_local = DatabasePersistence()
+            db_local.connect()
+            try:
+                log_step("Starting device visibility analysis...", "PROGRESS")
+                analyzer = DeviceVisibilityAnalyzer(db_local)
+                analyzer.analyze_all_properties(db_properties)
+                log_step("Device visibility analysis complete", "SUCCESS")
+            finally:
+                db_local.disconnect()
+        
+        # Execute Phase 2 tasks in parallel
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = {
+                executor.submit(analyze_page_visibility): "page_visibility",
+                executor.submit(analyze_device_visibility): "device_visibility"
+            }
+            
+            # Wait for all tasks and fail-fast on error
+            for future in as_completed(futures):
+                task_name = futures[future]
+                try:
+                    future.result()  # Raises if task failed
+                    update_pipeline_state(
+                        completed_steps=PIPELINE_STATE["completed_steps"] + [task_name]
+                    )
+                except Exception as e:
+                    # Cancel remaining futures
+                    for f in futures:
+                        f.cancel()
+                    raise RuntimeError(f"Phase 2 failed during {task_name}: {e}") from e
+        
+        log_step("All analysis complete", "SUCCESS")
+        update_pipeline_state(current_step="Pipeline completed", phase="completed")
+        
+        print("\n" + "="*80)
+        log_step("PIPELINE COMPLETED SUCCESSFULLY", "SUCCESS")
+        print("="*80 + "\n")
     
     except Exception as e:
-        print(f"\n[FATAL ERROR] {e}")
-        print("Exiting with error.\n")
+        log_step(f"PIPELINE FAILED: {e}", "ERROR")
+        update_pipeline_state(error=str(e), phase="failed")
         raise
     
     finally:
         # Always close database connection
         if db:
             db.disconnect()
+        
+        # Reset running state
+        update_pipeline_state(is_running=False)
 
 
 def main():
@@ -171,9 +300,6 @@ def main():
     1. Checks if GSC authentication exists
     2. If not authenticated, runs OAuth flow
     3. Then executes the full pipeline
-    
-    This preserves the existing CLI UX while maintaining
-    separation between auth and pipeline execution.
     """
     # Check authentication status
     client = GSCClient()
@@ -188,7 +314,7 @@ def main():
         # Run OAuth flow (will open browser)
         client.authenticate()
         
-        print("\n✓ Authentication successful!")
+        print("\n✅ Authentication successful!")
         print("="*80 + "\n")
     
     # Run the pipeline (assumes authentication exists)
