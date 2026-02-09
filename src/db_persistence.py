@@ -1,11 +1,11 @@
 """
 Database Persistence Layer
-Handles insertion of websites and properties into Supabase
+Handles insertion of websites and properties and metrics into Supabase
 """
 
 import os
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, execute_batch
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 from datetime import datetime
@@ -16,7 +16,7 @@ load_dotenv()
 
 class DatabasePersistence:
     """Handles database operations for websites and properties"""
-    
+
     def __init__(self):
         self.db_url = os.getenv('SUPABASE_DB_URL')
         if not self.db_url:
@@ -60,7 +60,7 @@ class DatabasePersistence:
         if self.connection:
             self.connection.commit()
             print("[DB] ✓ Transaction committed")
-    
+
     def rollback_transaction(self) -> None:
         """Rollback the current transaction"""
         if self.connection:
@@ -277,4 +277,138 @@ class DatabasePersistence:
         except psycopg2.Error as e:
             print(f"[ERROR] Failed to fetch properties: {e}")
             raise RuntimeError(f"Database error fetching properties: {e}") from e
+    
+    # ========================================
+    # PHASE 5: PAGE METRICS PERSISTENCE
+    # ========================================
+    
+    def persist_page_metrics(self, property_id: str, page_metrics: List[Dict[str, Any]], 
+                            show_progress: bool = False) -> Dict[str, int]:
+        """
+        Insert or update page metrics for a property using batch inserts
+        Uses ON CONFLICT DO UPDATE to handle GSC data revisions
+        
+        Args:
+            property_id: UUID of the property
+            page_metrics: List of dicts with keys: page_url, date, clicks, impressions, ctr, position
+            show_progress: If True, log progress every 500 rows (for backfill)
+        
+        Returns:
+            Dictionary with total rows processed
+        """
+        if not page_metrics:
+            return {'rows_processed': 0}
+        
+        total_rows = len(page_metrics)
+        batch_size = 500
+        
+        try:
+            # Prepare SQL for batch insert
+            insert_sql = """
+                INSERT INTO page_daily_metrics 
+                    (property_id, page_url, date, clicks, impressions, ctr, position, created_at, updated_at)
+                VALUES 
+                    (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                ON CONFLICT (property_id, page_url, date) 
+                DO UPDATE SET
+                    clicks = EXCLUDED.clicks,
+                    impressions = EXCLUDED.impressions,
+                    ctr = EXCLUDED.ctr,
+                    position = EXCLUDED.position,
+                    updated_at = NOW()
+            """
+            
+            # Process in batches
+            for i in range(0, total_rows, batch_size):
+                batch = page_metrics[i:i + batch_size]
+                
+                # Prepare batch data
+                batch_data = [
+                    (
+                        property_id,
+                        metric['page_url'],
+                        metric['date'],
+                        metric['clicks'],
+                        metric['impressions'],
+                        metric['ctr'],
+                        metric['position']
+                    )
+                    for metric in batch
+                ]
+                
+                # Execute batch insert
+                execute_batch(self.cursor, insert_sql, batch_data, page_size=batch_size)
+                
+                # Log progress if requested
+                if show_progress:
+                    rows_processed = min(i + batch_size, total_rows)
+                    print(f"  Inserted {rows_processed:,} / {total_rows:,} rows...")
+            
+            return {
+                'rows_processed': total_rows
+            }
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to persist page metrics: {e}")
+            raise RuntimeError(f"Database error persisting page metrics: {e}") from e
+            print(f"[ERROR] Failed to persist page metrics: {e}")
+            raise RuntimeError(f"Database error persisting page metrics: {e}") from e
+    
+    def fetch_page_metrics_last_14_days(self, property_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch all page metrics for the last 14 days for a property
+        Used for visibility analysis
+        
+        Args:
+            property_id: UUID of the property
+        
+        Returns:
+            List of dicts with: page_url, date, clicks, impressions, ctr, position
+        """
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    page_url,
+                    date,
+                    clicks,
+                    impressions,
+                    ctr,
+                    position
+                FROM page_daily_metrics
+                WHERE property_id = %s
+                  AND date >= CURRENT_DATE - INTERVAL '14 days'
+                ORDER BY date DESC, page_url
+            """, (property_id,))
+            
+            metrics = self.cursor.fetchall()
+            return [dict(metric) for metric in metrics]
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch page metrics: {e}")
+            raise RuntimeError(f"Database error fetching page metrics: {e}") from e
+    
+    def get_page_metrics_count(self, property_id: str) -> int:
+        """
+        Get total count of page metric rows for a property
+        Used to detect if backfill is needed
+        
+        Args:
+            property_id: UUID of the property
+        
+        Returns:
+            Total number of page-date rows
+        """
+        try:
+            self.cursor.execute("""
+                SELECT COUNT(*) as count
+                FROM page_daily_metrics
+                WHERE property_id = %s
+            """, (property_id,))
+            
+            result = self.cursor.fetchone()
+            return result['count'] if result else 0
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to count page metrics: {e}")
+            raise RuntimeError(f"Database error counting page metrics: {e}") from e
 

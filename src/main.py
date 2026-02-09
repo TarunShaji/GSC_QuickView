@@ -1,5 +1,5 @@
 """
-GSC Quick View - Phase 4: Discovery, Persistence, Metrics & Aggregation
+GSC Quick View - Phase 5: Full Pipeline with Page-Level Visibility
 
 This script:
 1. Authenticates with Google Search Console API
@@ -7,10 +7,12 @@ This script:
 3. Filters to Owner/Full User only
 4. Groups properties by base domain
 5. Persists websites and properties to Supabase
-6. Fetches Search Analytics metrics for all properties
-7. Persists daily metrics to Supabase
-8. Computes 7-day vs 7-day comparisons
-9. Outputs JSON for frontend consumption
+6. Fetches Search Analytics property-level metrics
+7. Persists daily property metrics to Supabase
+8. Computes 7-day vs 7-day property comparisons
+9. Ingests daily page-level metrics (today-2)
+10. Analyzes page visibility (new/lost/continuing pages)
+11. Outputs JSON for frontend consumption
 
 NO UI, NO alerts yet
 """
@@ -20,14 +22,16 @@ from property_grouper import PropertyGrouper
 from db_persistence import DatabasePersistence
 from gsc_metrics_ingestor import GSCMetricsIngestor
 from metrics_aggregator import MetricsAggregator
+from page_metrics_daily_ingestor import PageMetricsDailyIngestor
+from page_visibility_analyzer import PageVisibilityAnalyzer
 
 
 def main():
     """
-    Phase 4 entry point: GSC property discovery, grouping, persistence, metrics ingestion, and aggregation
+    Phase 5 entry point: Full pipeline with page-level visibility analysis
     """
     print("\n" + "="*80)
-    print("GSC QUICK VIEW - PHASE 4: DISCOVERY, PERSISTENCE, METRICS & AGGREGATION")
+    print("GSC QUICK VIEW - PHASE 5: FULL PIPELINE WITH PAGE VISIBILITY")
     print("="*80 + "\n")
     
     db = None
@@ -78,12 +82,22 @@ def main():
         ingestor = GSCMetricsIngestor(client.service, db)
         metrics_summary = ingestor.ingest_all_properties(db_properties)
         
-        # Step 10: Compute 7v7 comparisons
-        print("Step 9: Computing 7-day vs 7-day comparisons...")
+        # Step 10: Compute 7v7 property comparisons
+        print("Step 9: Computing 7-day vs 7-day property comparisons...")
         aggregator = MetricsAggregator(db)
         comparison_results = aggregator.aggregate_all_properties(db_properties)
         
-        print("✓ Phase 4 complete - discovery, persistence, metrics, and aggregation successful\n")
+        # Step 11: Ingest daily page metrics (today-2)
+        print("Step 10: Ingesting daily page metrics...")
+        page_ingestor = PageMetricsDailyIngestor(client.service, db)
+        page_ingestor.ingest_all_properties(db_properties)
+        
+        # Step 12: Analyze page visibility
+        print("Step 11: Analyzing page visibility...")
+        visibility_analyzer = PageVisibilityAnalyzer(db)
+        visibility_results = visibility_analyzer.analyze_all_properties(db_properties)
+        
+        print("✓ Phase 5 complete - full pipeline with page visibility analysis successful\n")
     
     except Exception as e:
         print(f"\n[FATAL ERROR] {e}")
