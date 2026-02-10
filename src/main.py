@@ -272,29 +272,27 @@ def run_pipeline():
         log_step("All analysis complete", "SUCCESS")
         
         # ========================================================================
-        # PHASE 3: ALERT DETECTION & EMAIL SENDING (SEQUENTIAL)
+        # PHASE 3: ALERT DETECTION (DB WRITES ONLY)
         # ========================================================================
         
         print("\n" + "="*80)
-        log_step("PHASE 3: ALERT DETECTION & EMAIL SENDING", "INFO")
+        log_step("PHASE 3: ALERT DETECTION", "INFO")
         print("="*80 + "\n")
         
         update_pipeline_state(
             phase="alerting",
-            current_step="Detecting impression drops and sending alerts"
+            current_step="Detecting impression drops"
         )
         
         try:
-            # Import alert modules
+            # Import alert detector
             import alert_detector
-            import email_service
             
-            # Detect alerts for all properties
-            triggered_alerts = alert_detector.detect_alerts_for_all_properties(db)
+            # Detect alerts and insert into database
+            triggered_count = alert_detector.detect_alerts_for_all_properties(db)
             
-            # Send emails if alerts triggered
-            if triggered_alerts:
-                email_service.send_all_alert_emails(triggered_alerts, db)
+            if triggered_count > 0:
+                log_step(f"{triggered_count} alert(s) detected and saved to database", "SUCCESS")
             else:
                 log_step("No alerts triggered", "SUCCESS")
             
@@ -303,7 +301,7 @@ def run_pipeline():
             )
         
         except Exception as e:
-            # Alert failures should not break the pipeline
+            # Alert detection failures should not break the pipeline
             log_step(f"Alert detection failed: {e}", "WARNING")
             log_step("Pipeline will continue (alerts are non-critical)", "INFO")
         

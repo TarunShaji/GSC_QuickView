@@ -14,7 +14,7 @@ Usage:
     uvicorn api:app --reload
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 
 # Import pipeline + GSC client
@@ -92,12 +92,15 @@ def pipeline_status():
     return PIPELINE_STATE
 
 @app.post("/pipeline/run")
-def run_pipeline_endpoint():
+def run_pipeline_endpoint(background_tasks: BackgroundTasks):
     """
     Execute the full GSC analytics pipeline.
 
     Requirements:
     - Backend must already be authenticated
+    
+    The pipeline runs synchronously and returns immediately after Phase 3.
+    Email dispatching happens in the background.
     """
     client = GSCClient()
 
@@ -109,8 +112,32 @@ def run_pipeline_endpoint():
 
     # Run the pipeline synchronously (blocking)
     run_pipeline()
+    
+    # Dispatch alerts in background (non-blocking)
+    background_tasks.add_task(dispatch_alerts_background)
 
     return {"status": "completed"}
+
+
+def dispatch_alerts_background():
+    """
+    Background task to dispatch pending email alerts.
+    Runs after pipeline completes, doesn't block HTTP response.
+    """
+    try:
+        from db_persistence import DatabasePersistence
+        import alert_dispatcher
+        
+        db = DatabasePersistence()
+        db.connect()
+        
+        result = alert_dispatcher.dispatch_pending_alerts(db)
+        
+        print(f"[BACKGROUND] Alert dispatcher: {result['sent']} sent, {result['failed']} failed")
+        
+        db.disconnect()
+    except Exception as e:
+        print(f"[BACKGROUND] Alert dispatcher failed: {e}")
 
 
 # -------------------------
@@ -318,5 +345,28 @@ def get_device_visibility(property_id: str):
             "property_id": property_id,
             "devices": result
         }
+    finally:
+        db.disconnect()
+
+# -------------------------
+# Alerts
+# -------------------------
+
+@app.get("/alerts")
+def get_alerts(limit: int = 20):
+    """
+    Get recent alerts with email status.
+    
+    Query params:
+        limit: Maximum number of alerts to return (default: 20)
+    
+    Returns:
+        List of alerts with property info and email status
+    """
+    db = DatabasePersistence()
+    db.connect()
+    try:
+        alerts = db.fetch_recent_alerts(limit)
+        return [serialize_row(alert) for alert in alerts]
     finally:
         db.disconnect()

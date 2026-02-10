@@ -155,15 +155,18 @@ def detect_alert_for_property(property_id: str, db) -> Optional[str]:
         return None
 
 
-def detect_alerts_for_all_properties(db) -> List[Dict[str, Any]]:
+def detect_alerts_for_all_properties(db) -> int:
     """
     Detect alerts for all properties in the database.
+    
+    This function ONLY detects and inserts alerts into the database.
+    Email sending is handled separately by alert_dispatcher.py.
     
     Args:
         db: DatabasePersistence instance
     
     Returns:
-        List of triggered alerts with: alert_id, property_id, site_url, delta_pct
+        Count of triggered alerts
     """
     log_alert("Starting alert detection for all properties")
     
@@ -171,7 +174,7 @@ def detect_alerts_for_all_properties(db) -> List[Dict[str, Any]]:
     properties = db.fetch_all_properties()
     log_alert(f"Evaluating {len(properties)} properties")
     
-    triggered_alerts = []
+    triggered_count = 0
     
     for prop in properties:
         property_id = prop['id']
@@ -180,12 +183,9 @@ def detect_alerts_for_all_properties(db) -> List[Dict[str, Any]]:
         alert_id = detect_alert_for_property(property_id, db)
         
         if alert_id:
-            triggered_alerts.append({
-                "alert_id": alert_id,
-                "property_id": property_id,
-                "site_url": prop['site_url']
-            })
+            triggered_count += 1
     
-    log_alert(f"Alert detection complete: {len(triggered_alerts)} alerts triggered")
+    log_alert(f"Alert detection complete: {triggered_count} alerts triggered")
+    log_alert(f"Alerts inserted into database with email_sent = false")
     
-    return triggered_alerts
+    return triggered_count

@@ -60,6 +60,11 @@ export const api = {
         getDevices: (propertyId: string) =>
             fetchJson<DeviceVisibilityResponse>(`/properties/${propertyId}/devices`),
     },
+
+    alerts: {
+        getAll: (limit: number = 20) =>
+            fetchJson<any[]>(`/alerts?limit=${limit}`),
+    },
 };
 
 export default api;

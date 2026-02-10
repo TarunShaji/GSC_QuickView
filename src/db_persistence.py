@@ -1024,3 +1024,82 @@ class DatabasePersistence:
             print(f"[ERROR] Failed to fetch property URL: {e}")
             raise RuntimeError(f"Database error fetching property URL: {e}") from e
 
+
+    def fetch_pending_alerts(self) -> List[Dict[str, Any]]:
+        """
+        Fetch all alerts where email_sent = false.
+        
+        Used by alert dispatcher to send pending emails.
+        
+        Returns:
+            List of alert dicts with: id, property_id, site_url, alert_type,
+                                     prev_7_impressions, last_7_impressions, delta_pct
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    a.id,
+                    a.property_id,
+                    a.alert_type,
+                    a.prev_7_impressions,
+                    a.last_7_impressions,
+                    a.delta_pct,
+                    a.triggered_at,
+                    p.site_url
+                FROM alerts a
+                JOIN properties p ON a.property_id = p.id
+                WHERE a.email_sent = false
+                ORDER BY a.triggered_at ASC
+            """)
+            
+            alerts = self.cursor.fetchall()
+            return [dict(row) for row in alerts]
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch pending alerts: {e}")
+            raise RuntimeError(f"Database error fetching pending alerts: {e}") from e
+
+
+    def fetch_recent_alerts(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """
+        Fetch recent alerts for frontend display.
+        
+        Args:
+            limit: Maximum number of alerts to return
+        
+        Returns:
+            List of alert dicts with: id, property_id, site_url, alert_type,
+                                     prev_7_impressions, last_7_impressions, delta_pct,
+                                     triggered_at, email_sent
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    a.id,
+                    a.property_id,
+                    a.alert_type,
+                    a.prev_7_impressions,
+                    a.last_7_impressions,
+                    a.delta_pct,
+                    a.triggered_at,
+                    a.email_sent,
+                    p.site_url
+                FROM alerts a
+                JOIN properties p ON a.property_id = p.id
+                ORDER BY a.triggered_at DESC
+                LIMIT %s
+            """, (limit,))
+            
+            alerts = self.cursor.fetchall()
+            return [dict(row) for row in alerts]
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch recent alerts: {e}")
+            raise RuntimeError(f"Database error fetching recent alerts: {e}") from e
+
