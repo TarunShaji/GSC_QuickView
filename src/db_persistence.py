@@ -852,3 +852,175 @@ class DatabasePersistence:
             print(f"[ERROR] Failed to fetch device visibility: {e}")
             raise RuntimeError(f"Database error fetching device visibility: {e}") from e
 
+
+    # =========================================================================
+    # ALERT METHODS (Email Alerting)
+    # =========================================================================
+
+    def insert_alert(
+        self, 
+        property_id: str, 
+        alert_type: str,
+        prev_7_impressions: int,
+        last_7_impressions: int,
+        delta_pct: float
+    ) -> str:
+        """
+        Insert an alert into the alerts table.
+        
+        Args:
+            property_id: UUID of the property
+            alert_type: Type of alert (e.g., 'impression_drop')
+            prev_7_impressions: Previous 7-day impressions
+            last_7_impressions: Last 7-day impressions
+            delta_pct: Percentage change
+        
+        Returns:
+            UUID of the inserted alert
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                INSERT INTO alerts 
+                    (property_id, alert_type, prev_7_impressions, last_7_impressions, 
+                     delta_pct, triggered_at, email_sent)
+                VALUES (%s, %s, %s, %s, %s, NOW(), false)
+                RETURNING id
+            """, (property_id, alert_type, prev_7_impressions, last_7_impressions, delta_pct))
+            
+            result = self.cursor.fetchone()
+            self.connection.commit()
+            
+            return result['id']
+        
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to insert alert: {e}")
+            raise RuntimeError(f"Database error inserting alert: {e}") from e
+
+
+    def fetch_alert_recipients(self) -> List[str]:
+        """
+        Fetch all alert recipients from alert_recipients table.
+        
+        Returns:
+            List of email addresses
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                SELECT email
+                FROM alert_recipients
+                ORDER BY created_at
+            """)
+            
+            recipients = self.cursor.fetchall()
+            return [row['email'] for row in recipients]
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch alert recipients: {e}")
+            raise RuntimeError(f"Database error fetching alert recipients: {e}") from e
+
+
+    def mark_alert_email_sent(self, alert_id: str) -> None:
+        """
+        Mark an alert as email sent.
+        
+        Args:
+            alert_id: UUID of the alert
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                UPDATE alerts
+                SET email_sent = true
+                WHERE id = %s
+            """, (alert_id,))
+            
+            self.connection.commit()
+        
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to mark alert email sent: {e}")
+            raise RuntimeError(f"Database error marking alert email sent: {e}") from e
+
+
+    def fetch_alert_details(self, alert_id: str) -> Dict[str, Any]:
+        """
+        Fetch alert details including property URL.
+        
+        Args:
+            alert_id: UUID of the alert
+        
+        Returns:
+            Dict with: alert_id, property_id, site_url, alert_type, 
+                      prev_7_impressions, last_7_impressions, delta_pct
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    a.id as alert_id,
+                    a.property_id,
+                    p.site_url,
+                    a.alert_type,
+                    a.prev_7_impressions,
+                    a.last_7_impressions,
+                    a.delta_pct,
+                    a.triggered_at
+                FROM alerts a
+                JOIN properties p ON a.property_id = p.id
+                WHERE a.id = %s
+            """, (alert_id,))
+            
+            result = self.cursor.fetchone()
+            
+            if not result:
+                raise RuntimeError(f"Alert not found: {alert_id}")
+            
+            return dict(result)
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch alert details: {e}")
+            raise RuntimeError(f"Database error fetching alert details: {e}") from e
+
+
+    def fetch_property_url(self, property_id: str) -> str:
+        """
+        Fetch site_url for a property.
+        
+        Args:
+            property_id: UUID of the property
+        
+        Returns:
+            Site URL string
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                SELECT site_url
+                FROM properties
+                WHERE id = %s
+            """, (property_id,))
+            
+            result = self.cursor.fetchone()
+            
+            if not result:
+                raise RuntimeError(f"Property not found: {property_id}")
+            
+            return result['site_url']
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch property URL: {e}")
+            raise RuntimeError(f"Database error fetching property URL: {e}") from e
+

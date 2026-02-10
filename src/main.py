@@ -270,6 +270,47 @@ def run_pipeline():
                     raise RuntimeError(f"Phase 2 failed during {task_name}: {e}") from e
         
         log_step("All analysis complete", "SUCCESS")
+        
+        # ========================================================================
+        # PHASE 3: ALERT DETECTION & EMAIL SENDING (SEQUENTIAL)
+        # ========================================================================
+        
+        print("\n" + "="*80)
+        log_step("PHASE 3: ALERT DETECTION & EMAIL SENDING", "INFO")
+        print("="*80 + "\n")
+        
+        update_pipeline_state(
+            phase="alerting",
+            current_step="Detecting impression drops and sending alerts"
+        )
+        
+        try:
+            # Import alert modules
+            import alert_detector
+            import email_service
+            
+            # Detect alerts for all properties
+            triggered_alerts = alert_detector.detect_alerts_for_all_properties(db)
+            
+            # Send emails if alerts triggered
+            if triggered_alerts:
+                email_service.send_all_alert_emails(triggered_alerts, db)
+            else:
+                log_step("No alerts triggered", "SUCCESS")
+            
+            update_pipeline_state(
+                completed_steps=PIPELINE_STATE["completed_steps"] + ["alert_detection"]
+            )
+        
+        except Exception as e:
+            # Alert failures should not break the pipeline
+            log_step(f"Alert detection failed: {e}", "WARNING")
+            log_step("Pipeline will continue (alerts are non-critical)", "INFO")
+        
+        # ========================================================================
+        # PIPELINE COMPLETION
+        # ========================================================================
+        
         update_pipeline_state(current_step="Pipeline completed", phase="completed")
         
         print("\n" + "="*80)
