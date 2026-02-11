@@ -1,0 +1,151 @@
+[08:55:00] [DISPATCHER] ============================================================
+[08:55:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[08:55:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[08:55:01] [DISPATCHER] Database connection established
+[08:55:01] [DISPATCHER] Starting alert dispatcher
+[08:55:02] [DISPATCHER] No pending alerts to send
+[08:55:02] [DISPATCHER] ============================================================
+[08:55:02] [DISPATCHER] Summary: 0 sent, 0 failed, 0 total
+[08:55:02] [DISPATCHER] ============================================================
+[08:55:02] [DISPATCHER] Exiting successfully
+[DB] Connection closed
+[08:55:02] [DISPATCHER] Database connection closed
+[09:00:00] [DISPATCHER] ============================================================
+[09:00:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[09:00:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[09:00:01] [DISPATCHER] Database connection established
+[09:00:01] [DISPATCHER] Starting alert dispatcher
+[09:00:01] [DISPATCHER] No pending alerts to send
+[09:00:01] [DISPATCHER] ============================================================
+[09:00:01] [DISPATCHER] Summary: 0 sent, 0 failed, 0 total
+[09:00:01] [DISPATCHER] ============================================================
+[09:00:01] [DISPATCHER] Exiting successfully
+[DB] Connection closed
+[09:00:01] [DISPATCHER] Database connection closed
+[09:05:00] [DISPATCHER] ============================================================
+[09:05:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[09:05:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[09:05:01] [DISPATCHER] Database connection established
+[09:05:01] [DISPATCHER] Starting alert dispatcher
+[09:05:01] [DISPATCHER] Found 20 pending alert(s)
+[09:05:01] [DISPATCHER] Sending to 1 recipient(s): tarunshaji1@gmail.com
+[09:05:01] [DISPATCHER] Opening SMTP connection to smtp.gmail.com:587
+[09:05:03] [DISPATCHER] ✅ SMTP connection established and authenticated
+[09:05:03] [DISPATCHER] Processing alert 1/20 for https://amouage.com/
+[09:05:05] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:05] [DISPATCHER] ✅ Alert a20ed9a0... sent successfully
+[09:05:07] [DISPATCHER] Processing alert 2/20 for sc-domain:authenticwaffle.com
+[09:05:09] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:09] [DISPATCHER] ✅ Alert 01d8c47a... sent successfully
+[09:05:11] [DISPATCHER] Processing alert 3/20 for https://blackbrookcase.com/
+[09:05:13] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:13] [DISPATCHER] ✅ Alert 2e3f8f9e... sent successfully
+[09:05:15] [DISPATCHER] Processing alert 4/20 for https://caleycosmetics.com/
+[09:05:17] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:17] [DISPATCHER] ✅ Alert 6b19726a... sent successfully
+[09:05:19] [DISPATCHER] Processing alert 5/20 for sc-domain:chotto-matte.com
+[09:05:21] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:21] [DISPATCHER] ✅ Alert a6185252... sent successfully
+[09:05:22] [DISPATCHER] Processing alert 6/20 for sc-domain:famolare.com
+[09:05:24] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:25] [DISPATCHER] ✅ Alert 6b5733d2... sent successfully
+[09:05:26] [DISPATCHER] Processing alert 7/20 for https://ferastyle.com/
+[09:05:28] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:28] [DISPATCHER] ✅ Alert db333d02... sent successfully
+[09:05:30] [DISPATCHER] Processing alert 8/20 for https://harlowe.eu/
+[09:05:32] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:32] [DISPATCHER] ✅ Alert 4dc992d4... sent successfully
+[09:05:34] [DISPATCHER] Processing alert 9/20 for https://ingreendients.com/
+[09:05:36] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:36] [DISPATCHER] ✅ Alert 1173cecb... sent successfully
+[09:05:37] [DISPATCHER] Processing alert 10/20 for https://justenoughwines.com/
+[09:05:39] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:39] [DISPATCHER] ✅ Alert 366d571e... sent successfully
+[09:05:41] [DISPATCHER] Processing alert 11/20 for https://littlemiamibrewing.com/
+[09:05:43] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:43] [DISPATCHER] ✅ Alert 2f023d28... sent successfully
+[09:05:45] [DISPATCHER] Processing alert 12/20 for https://www.littlemiamibrewing.com/
+[09:05:47] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:47] [DISPATCHER] ✅ Alert bb4f9da3... sent successfully
+[09:05:49] [DISPATCHER] Processing alert 13/20 for https://monq.com/
+[09:05:51] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:51] [DISPATCHER] ✅ Alert 74b0c952... sent successfully
+[09:05:53] [DISPATCHER] Processing alert 14/20 for https://www.plumbingsolutionsllc.com/
+[09:05:55] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:55] [DISPATCHER] ✅ Alert f57f6371... sent successfully
+[09:05:56] [DISPATCHER] Processing alert 15/20 for https://www.preetiexclusive.com/
+[09:05:58] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:05:58] [DISPATCHER] ✅ Alert 93dcbfca... sent successfully
+[09:06:00] [DISPATCHER] Processing alert 16/20 for https://www.premieroralsurgerygroup.com/
+[09:06:02] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:06:02] [DISPATCHER] ✅ Alert c4488826... sent successfully
+[09:06:04] [DISPATCHER] Processing alert 17/20 for https://ridgeoralsurgery.com/
+[09:06:06] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:06:06] [DISPATCHER] ✅ Alert f310b6de... sent successfully
+[09:06:07] [DISPATCHER] Processing alert 18/20 for https://saalt.com/
+[09:06:10] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:06:10] [DISPATCHER] ✅ Alert 42de4275... sent successfully
+[09:06:12] [DISPATCHER] Processing alert 19/20 for https://schoolyardsnacks.com/
+[09:06:14] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:06:14] [DISPATCHER] ✅ Alert 8de3db04... sent successfully
+[09:06:16] [DISPATCHER] Processing alert 20/20 for sc-domain:theepicureantrader.com
+[09:06:18] [DISPATCHER]   → Sent to tarunshaji1@gmail.com
+[09:06:19] [DISPATCHER] ✅ Alert cc52b4f3... sent successfully
+[09:06:19] [DISPATCHER] SMTP connection closed
+[09:06:19] [DISPATCHER] ============================================================
+[09:06:19] [DISPATCHER] Dispatcher complete: 20 sent, 0 failed
+[09:06:19] [DISPATCHER] ============================================================
+[09:06:19] [DISPATCHER] ============================================================
+[09:06:19] [DISPATCHER] Summary: 20 sent, 0 failed, 20 total
+[09:06:19] [DISPATCHER] ============================================================
+[09:06:19] [DISPATCHER] Exiting successfully
+[DB] Connection closed
+[09:06:19] [DISPATCHER] Database connection closed
+[09:10:00] [DISPATCHER] ============================================================
+[09:10:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[09:10:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[09:10:01] [DISPATCHER] Database connection established
+[09:10:01] [DISPATCHER] Starting alert dispatcher
+[09:10:02] [DISPATCHER] No pending alerts to send
+[09:10:02] [DISPATCHER] ============================================================
+[09:10:02] [DISPATCHER] Summary: 0 sent, 0 failed, 0 total
+[09:10:02] [DISPATCHER] ============================================================
+[09:10:02] [DISPATCHER] Exiting successfully
+[DB] Connection closed
+[09:10:02] [DISPATCHER] Database connection closed
+[09:15:00] [DISPATCHER] ============================================================
+[09:15:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[09:15:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[09:15:01] [DISPATCHER] Database connection established
+[09:15:01] [DISPATCHER] Starting alert dispatcher
+[09:15:02] [DISPATCHER] No pending alerts to send
+[09:15:02] [DISPATCHER] ============================================================
+[09:15:02] [DISPATCHER] Summary: 0 sent, 0 failed, 0 total
+[09:15:02] [DISPATCHER] ============================================================
+[09:15:02] [DISPATCHER] Exiting successfully
+[DB] Connection closed
+[09:15:02] [DISPATCHER] Database connection closed
+[09:20:00] [DISPATCHER] ============================================================
+[09:20:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[09:20:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[09:20:01] [DISPATCHER] Database connection established
+[09:20:01] [DISPATCHER] Starting alert dispatcher
+[09:20:01] [DISPATCHER] No pending alerts to send
+[09:20:01] [DISPATCHER] ============================================================
+[09:20:01] [DISPATCHER] Summary: 0 sent, 0 failed, 0 total
+[09:20:01] [DISPATCHER] ============================================================
+[09:20:01] [DISPATCHER] Exiting successfully
+[DB] Connection closed
+[09:20:01] [DISPATCHER] Database connection closed

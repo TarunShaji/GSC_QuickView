@@ -14,7 +14,7 @@ Usage:
     uvicorn api:app --reload
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
 # Import pipeline + GSC client
@@ -92,7 +92,7 @@ def pipeline_status():
     return PIPELINE_STATE
 
 @app.post("/pipeline/run")
-def run_pipeline_endpoint(background_tasks: BackgroundTasks):
+def run_pipeline_endpoint():
     """
     Execute the full GSC analytics pipeline.
 
@@ -100,7 +100,8 @@ def run_pipeline_endpoint(background_tasks: BackgroundTasks):
     - Backend must already be authenticated
     
     The pipeline runs synchronously and returns immediately after Phase 3.
-    Email dispatching happens in the background.
+    Alert detection writes to database.
+    Email dispatching is handled by independent cron job.
     """
     client = GSCClient()
 
@@ -112,14 +113,16 @@ def run_pipeline_endpoint(background_tasks: BackgroundTasks):
 
     # Run the pipeline synchronously (blocking)
     run_pipeline()
-    
-    # Dispatch alerts in background (non-blocking)
-    background_tasks.add_task(dispatch_alerts_background)
 
     return {"status": "completed"}
 
 
-def dispatch_alerts_background():
+# NOTE: Email dispatching is now handled by a separate cron job
+# Run: python alert_dispatcher.py (scheduled via cron every 5 minutes)
+# This ensures email sending never blocks the pipeline or UI
+
+
+def _deprecated_dispatch_alerts_background():
     """
     Background task to dispatch pending email alerts.
     Runs after pipeline completes, doesn't block HTTP response.

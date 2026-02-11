@@ -1103,3 +1103,197 @@ class DatabasePersistence:
             print(f"[ERROR] Failed to fetch recent alerts: {e}")
             raise RuntimeError(f"Database error fetching recent alerts: {e}") from e
 
+
+    # ========================================================================
+    # PIPELINE STATE MANAGEMENT
+    # ========================================================================
+
+    def ensure_pipeline_runs_table(self) -> None:
+        """
+        Create pipeline_runs table if it doesn't exist.
+        Called automatically on connect().
+        """
+        try:
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS pipeline_runs (
+                    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+                    is_running BOOLEAN DEFAULT false,
+                    phase TEXT DEFAULT 'idle',
+                    current_step TEXT,
+                    progress_current INTEGER DEFAULT 0,
+                    progress_total INTEGER DEFAULT 0,
+                    completed_steps TEXT[] DEFAULT '{}',
+                    error TEXT,
+                    started_at TIMESTAMPTZ,
+                    completed_at TIMESTAMPTZ,
+                    updated_at TIMESTAMPTZ DEFAULT now()
+                )
+            """)
+            self.connection.commit()
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to create pipeline_runs table: {e}")
+            raise RuntimeError(f"Database error creating pipeline_runs table: {e}") from e
+
+
+    def upsert_pipeline_state(
+        self,
+        run_id: Optional[str] = None,
+        is_running: Optional[bool] = None,
+        phase: Optional[str] = None,
+        current_step: Optional[str] = None,
+        progress_current: Optional[int] = None,
+        progress_total: Optional[int] = None,
+        completed_steps: Optional[List[str]] = None,
+        error: Optional[str] = None,
+        started_at: Optional[str] = None,
+        completed_at: Optional[str] = None
+    ) -> str:
+        """
+        Insert or update pipeline state in database.
+        
+        Args:
+            run_id: Pipeline run ID (auto-generated if None)
+            is_running: Whether pipeline is currently running
+            phase: Current phase (idle/ingestion/analysis/completed/failed)
+            current_step: Current step description
+            progress_current: Current progress count
+            progress_total: Total progress count
+            completed_steps: List of completed step names
+            error: Error message if failed
+            started_at: ISO timestamp when started
+            completed_at: ISO timestamp when completed
+        
+        Returns:
+            run_id: The ID of the pipeline run
+        """
+        try:
+            # If no run_id, fetch or create latest
+            if run_id is None:
+                self.cursor.execute("""
+                    SELECT id FROM pipeline_runs 
+                    ORDER BY updated_at DESC 
+                    LIMIT 1
+                """)
+                row = self.cursor.fetchone()
+                run_id = row['id'] if row else None
+            
+            # Build dynamic update based on provided args
+            updates = []
+            params = []
+            
+            if is_running is not None:
+                updates.append("is_running = %s")
+                params.append(is_running)
+            if phase is not None:
+                updates.append("phase = %s")
+                params.append(phase)
+            if current_step is not None:
+                updates.append("current_step = %s")
+                params.append(current_step)
+            if progress_current is not None:
+                updates.append("progress_current = %s")
+                params.append(progress_current)
+            if progress_total is not None:
+                updates.append("progress_total = %s")
+                params.append(progress_total)
+            if completed_steps is not None:
+                updates.append("completed_steps = %s")
+                params.append(completed_steps)
+            if error is not None:
+                updates.append("error = %s")
+                params.append(error)
+            if started_at is not None:
+                updates.append("started_at = %s")
+                params.append(started_at)
+            if completed_at is not None:
+                updates.append("completed_at = %s")
+                params.append(completed_at)
+            
+            updates.append("updated_at = now()")
+            
+            if run_id:
+                # Update existing run
+                query = f"""
+                    UPDATE pipeline_runs 
+                    SET {', '.join(updates)}
+                    WHERE id = %s
+                    RETURNING id
+                """
+                params.append(run_id)
+                self.cursor.execute(query, tuple(params))
+            else:
+                # Insert new run
+                query = f"""
+                    INSERT INTO pipeline_runs ({', '.join([u.split(' = ')[0] for u in updates if '=' in u])})
+                    VALUES ({', '.join(['%s'] * len(params))})
+                    RETURNING id
+                """
+                self.cursor.execute(query, tuple(params))
+            
+            self.connection.commit()
+            
+            result = self.cursor.fetchone()
+            return result['id'] if result else run_id
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to upsert pipeline state: {e}")
+            raise RuntimeError(f"Database error upserting pipeline state: {e}") from e
+
+
+    def fetch_pipeline_state(self) -> Optional[Dict[str, Any]]:
+        """
+        Fetch the latest pipeline run state from database.
+        
+        Returns:
+            Dict with pipeline state or None if no runs exist
+        """
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    id,
+                    is_running,
+                    phase,
+                    current_step,
+                    progress_current,
+                    progress_total,
+                    completed_steps,
+                    error,
+                    started_at,
+                    completed_at,
+                    updated_at
+                FROM pipeline_runs
+                ORDER BY updated_at DESC
+                LIMIT 1
+            """)
+            
+            row = self.cursor.fetchone()
+            if not row:
+                # No runs exist yet, return default idle state
+                return {
+                    "is_running": False,
+                    "phase": "idle",
+                    "current_step": None,
+                    "progress": {"current": 0, "total": 0},
+                    "completed_steps": [],
+                    "error": None,
+                    "started_at": None
+                }
+            
+            return {
+                "id": row['id'],
+                "is_running": row['is_running'],
+                "phase": row['phase'],
+                "current_step": row['current_step'],
+                "progress": {
+                    "current": row['progress_current'] or 0,
+                    "total": row['progress_total'] or 0
+                },
+                "completed_steps": row['completed_steps'] or [],
+                "error": row['error'],
+                "started_at": row['started_at'].isoformat() if row['started_at'] else None
+            }
+        
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch pipeline state: {e}")
+            raise RuntimeError(f"Database error fetching pipeline state: {e}") from e
+
