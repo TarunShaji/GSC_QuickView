@@ -15,6 +15,8 @@ import json
 from datetime import datetime
 from typing import Dict, List, Any
 from db_persistence import DatabasePersistence
+from utils.classification import classify_delta
+from config.date_windows import ANALYSIS_WINDOW_DAYS
 
 
 class DeviceVisibilityAnalyzer:
@@ -24,14 +26,15 @@ class DeviceVisibilityAnalyzer:
         self.db = db
         self.threshold_pct = 40.0  # 40% threshold for drop/gain
     
-    def fetch_last_14_days(self, property_id: str) -> List[Dict[str, Any]]:
+    def fetch_analysis_metrics(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
         """
-        Fetch last 14 days of device metrics for a property
+        Fetch metrics required for analysis.
+        Uses canonical ANALYSIS_WINDOW_DAYS.
         
         Returns:
             List of device metrics (max 42 rows: 14 days * 3 devices)
         """
-        return self.db.fetch_device_metrics_last_14_days(property_id)
+        return self.db.fetch_device_metrics_for_analysis(account_id, property_id)
     
     def split_by_device(self, metrics: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -64,12 +67,13 @@ class DeviceVisibilityAnalyzer:
         # Last 7 days = rows 0-6
         # Previous 7 days = rows 7-13
         
-        if len(device_metrics) < 14:
+        if len(device_metrics) < ANALYSIS_WINDOW_DAYS:
             # Insufficient data for this device
             return ([], [])
-        
-        last_7 = device_metrics[0:7]
-        previous_7 = device_metrics[7:14]
+            
+        window_size = ANALYSIS_WINDOW_DAYS // 2
+        last_7 = device_metrics[0:window_size]
+        previous_7 = device_metrics[window_size:ANALYSIS_WINDOW_DAYS]
         
         return (last_7, previous_7)
     
@@ -119,15 +123,9 @@ class DeviceVisibilityAnalyzer:
             return 'flat'
         
         delta_pct = ((last_7_impressions - prev_7_impressions) / prev_7_impressions) * 100
-        
-        if delta_pct <= -self.threshold_pct:
-            return 'significant_drop'
-        elif delta_pct >= self.threshold_pct:
-            return 'significant_gain'
-        else:
-            return 'flat'
+        return classify_delta(delta_pct, self.threshold_pct)
     
-    def analyze_property(self, property_data: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_property(self, account_id: str, property_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze device visibility for a single property
         
@@ -141,11 +139,19 @@ class DeviceVisibilityAnalyzer:
         print(f"\n[PROPERTY] {base_domain}")
         print(f"  Site URL: {site_url}")
         
-        # Fetch last 14 days
-        metrics = self.fetch_last_14_days(property_id)
+        # Fetch required metrics
+        metrics = self.fetch_analysis_metrics(account_id, property_id)
         
-        if len(metrics) < 14:
-            print(f"  [WARNING] Insufficient data: only {len(metrics)} rows available (need 42 for 3 devices)")
+        # User requested logging
+        print("\nRAW DEVICE METRICS:")
+        for row in metrics:
+            print(row['device'], row['date'], row['impressions'])
+            
+        # We need ANALYSIS_WINDOW_DAYS per device (approx)
+        # For simplicity, we check total row count vs (window * 3 devices)
+        min_rows = ANALYSIS_WINDOW_DAYS * 3
+        if len(metrics) < min_rows:
+            print(f"  [WARNING] Insufficient data: only {len(metrics)} rows available (need {min_rows} for 3 devices)")
             return {
                 'property_id': property_id,
                 'site_url': site_url,
@@ -221,7 +227,7 @@ class DeviceVisibilityAnalyzer:
             'details': details
         }
     
-    def analyze_all_properties(self, properties: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def analyze_all_properties(self, properties: List[Dict[str, Any]], account_id: str) -> Dict[str, Any]:
         """
         Analyze device visibility for all properties and persist to database.
         
@@ -240,7 +246,7 @@ class DeviceVisibilityAnalyzer:
         total_gains = 0
         
         for prop in properties:
-            result = self.analyze_property(prop)
+            result = self.analyze_property(account_id, prop)
             results.append(result)
             
             # Persist to database (primary output)
@@ -252,6 +258,7 @@ class DeviceVisibilityAnalyzer:
                         device_analysis[device] = result['details'][device] # Corrected to access 'details' key
                 
                 self.db.persist_device_visibility_analysis(
+                    account_id=account_id,
                     property_id=prop['id'],
                     analysis_results=device_analysis
                 )

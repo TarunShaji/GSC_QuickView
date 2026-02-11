@@ -18,6 +18,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Set, Tuple
 from decimal import Decimal
 from db_persistence import DatabasePersistence
+from utils.classification import classify_delta
+from config.date_windows import ANALYSIS_WINDOW_DAYS
 
 
 class PageVisibilityAnalyzer:
@@ -27,17 +29,18 @@ class PageVisibilityAnalyzer:
         self.db = db
         self.low_volume_threshold = 10  # Ignore pages with <10 total impressions for drop/gain classification
     
-    def fetch_last_14_days_pages(self, property_id: str) -> List[Dict[str, Any]]:
+    def fetch_analysis_metrics(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
         """
-        Fetch all page metrics for last 14 days
+        Fetch all page metrics required for analysis
         
         Args:
+            account_id: UUID of the account
             property_id: UUID of the property
         
         Returns:
             List of dicts with page_url, date, clicks, impressions, ctr, position
         """
-        return self.db.fetch_page_metrics_last_14_days(property_id)
+        return self.db.fetch_page_metrics_for_analysis(account_id, property_id)
     
     def build_page_sets(self, rows: List[Dict[str, Any]]) -> Tuple[Set[str], Set[str]]:
         """
@@ -56,12 +59,15 @@ class PageVisibilityAnalyzer:
         # Assuming rows are ordered DESC, first row is most recent
         most_recent_date = max(row['date'] for row in rows)
         
-        # Last 7 days: most_recent_date - 6 to most_recent_date (inclusive)
-        last_7_start = most_recent_date - timedelta(days=6)
+        # Split into two equal halves based on ANALYSIS_WINDOW_DAYS
+        window_size = ANALYSIS_WINDOW_DAYS // 2
         
-        # Previous 7 days: most_recent_date - 13 to most_recent_date - 7 (inclusive)
-        prev_7_start = most_recent_date - timedelta(days=13)
-        prev_7_end = most_recent_date - timedelta(days=7)
+        # Last window: most_recent_date - (window_size - 1) to most_recent_date
+        last_7_start = most_recent_date - timedelta(days=window_size - 1)
+        
+        # Previous window: most_recent_date - (ANALYSIS_WINDOW_DAYS - 1) to most_recent_date - window_size
+        prev_7_start = most_recent_date - timedelta(days=ANALYSIS_WINDOW_DAYS - 1)
+        prev_7_end = most_recent_date - timedelta(days=window_size)
         
         P_last = set()
         P_prev = set()
@@ -175,12 +181,10 @@ class PageVisibilityAnalyzer:
             total_impressions = last_7['impressions'] + prev_7['impressions']
             
             # Classify (only if above threshold)
-            classification = 'flat'
             if total_impressions >= self.low_volume_threshold:
-                if impressions_pct >= 50:
-                    classification = 'significant_gain'
-                elif impressions_pct <= -50:
-                    classification = 'significant_drop'
+                classification = classify_delta(impressions_pct, threshold=50.0)
+            else:
+                classification = 'flat'
             
             page_deltas.append({
                 'page_url': page_url,
@@ -199,11 +203,12 @@ class PageVisibilityAnalyzer:
         
         return page_deltas
     
-    def analyze_property(self, property_data: Dict[str, Any]) -> Dict[str, Any]:
+    def analyze_property(self, account_id: str, property_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Full visibility analysis for one property
         
         Args:
+            account_id: UUID of the account
             property_data: Dict with 'id', 'site_url', 'base_domain'
         
         Returns:
@@ -216,8 +221,8 @@ class PageVisibilityAnalyzer:
         print(f"\n[PROPERTY] {base_domain}")
         print(f"  Site URL: {site_url}")
         
-        # Fetch last 14 days of page metrics
-        rows = self.fetch_last_14_days_pages(property_id)
+        # Fetch page metrics for analysis
+        rows = self.fetch_analysis_metrics(account_id, property_id)
         
         if not rows:
             print(f"  [WARNING] No page metrics data available")
@@ -327,12 +332,13 @@ class PageVisibilityAnalyzer:
             }
         }
     
-    def analyze_all_properties(self, properties: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def analyze_all_properties(self, properties: List[Dict[str, Any]], account_id: str) -> Dict[str, Any]:
         """
         Analyze all properties and persist results to database.
         
         Args:
             properties: List of property dicts from database
+            account_id: UUID of the account
         
         Returns:
             Summary dict with aggregated results
@@ -350,7 +356,7 @@ class PageVisibilityAnalyzer:
         total_gains = 0
         
         for prop in properties:
-            result = self.analyze_property(prop)
+            result = self.analyze_property(account_id, prop)
             results.append(result)
             
             # Persist to database (primary output)

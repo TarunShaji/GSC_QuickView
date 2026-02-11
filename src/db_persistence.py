@@ -9,6 +9,9 @@ from psycopg2.extras import RealDictCursor, execute_batch
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 from datetime import datetime
+import json
+from auth.token_model import GSCAuthToken
+from config.date_windows import REQUIRED_HISTORY_DAYS, GSC_LAG_DAYS, ANALYSIS_WINDOW_DAYS
 
 # Load environment variables
 load_dotenv()
@@ -66,26 +69,218 @@ class DatabasePersistence:
         if self.connection:
             self.connection.rollback()
             print("[DB] ✗ Transaction rolled back")
+
+    # ========================================
+    # ACCOUNT & TOKEN MANAGEMENT
+    # ========================================
+
+    def upsert_account(self, email: str) -> str:
+        """
+        Create or update an account based on email.
+        
+        Args:
+            email: Google account email
+            
+        Returns:
+            UUID of the account
+        """
+        try:
+            self.cursor.execute("""
+                INSERT INTO accounts (google_email, created_at, updated_at)
+                VALUES (%s, NOW(), NOW())
+                ON CONFLICT (google_email) DO UPDATE SET
+                    updated_at = NOW()
+                RETURNING id
+            """, (email,))
+            
+            result = self.cursor.fetchone()
+            self.connection.commit()
+            account_id = result['id']
+            print(f"[DB] Account upserted: {email} (id: {account_id})")
+            return account_id
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to upsert account {email}: {e}")
+            raise RuntimeError(f"Database error upserting account: {e}") from e
+
+    def fetch_all_accounts(self) -> List[Dict[str, Any]]:
+        """Fetch all accounts for the cron dispatcher."""
+        try:
+            self.cursor.execute("SELECT id, google_email FROM accounts ORDER BY google_email")
+            return self.cursor.fetchall()
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch accounts: {e}")
+            raise RuntimeError(f"Database error fetching accounts: {e}") from e
+
+    def upsert_gsc_token(self, account_id: str, token: GSCAuthToken) -> None:
+        """
+        Store or update GSC tokens for an account using normalized columns.
+        Uses the canonical GSCAuthToken model to prevent NULL access_token errors.
+        
+        Args:
+            account_id: UUID of the account
+            token: GSCAuthToken instance
+        """
+        if not token.access_token:
+            print(f"[ERROR] Refusal to persist empty access_token for account {account_id}")
+            raise RuntimeError(f"Refusing to persist empty access_token for account {account_id}")
+
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                INSERT INTO gsc_tokens (
+                    account_id, access_token, refresh_token, token_uri, 
+                    client_id, client_secret, scopes, expiry, updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (account_id) DO UPDATE SET
+                    access_token = EXCLUDED.access_token,
+                    refresh_token = EXCLUDED.refresh_token,
+                    token_uri = EXCLUDED.token_uri,
+                    client_id = EXCLUDED.client_id,
+                    client_secret = EXCLUDED.client_secret,
+                    scopes = EXCLUDED.scopes,
+                    expiry = EXCLUDED.expiry,
+                    updated_at = NOW()
+            """, (
+                account_id,
+                token.access_token,
+                token.refresh_token,
+                token.token_uri,
+                token.client_id,
+                token.client_secret,
+                token.scopes,
+                token.expiry
+            ))
+            self.connection.commit()
+            print(f"[DB] Token updated for account: {account_id}")
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to update token for {account_id}: {e}")
+            raise RuntimeError(f"Database error updating token: {e}") from e
+
+    def fetch_gsc_token(self, account_id: str) -> Optional[GSCAuthToken]:
+        """
+        Fetch GSC tokens for an account and return a canonical GSCAuthToken model.
+        
+        Args:
+            account_id: UUID of the account
+            
+        Returns:
+            GSCAuthToken instance, or None if not found
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    access_token, refresh_token, token_uri, 
+                    client_id, client_secret, scopes, expiry 
+                FROM gsc_tokens 
+                WHERE account_id = %s
+            """, (account_id,))
+            
+            row = self.cursor.fetchone()
+            if not row:
+                return None
+            
+            return GSCAuthToken(
+                access_token=row['access_token'],
+                refresh_token=row['refresh_token'],
+                token_uri=row['token_uri'],
+                client_id=row['client_id'],
+                client_secret=row['client_secret'],
+                scopes=row['scopes'],
+                expiry=row['expiry']
+            )
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch token for {account_id}: {e}")
+            raise RuntimeError(f"Database error fetching token: {e}") from e
     
-    def insert_website(self, base_domain: str) -> Optional[str]:
+    def check_needs_backfill(self, account_id: str, property_id: str) -> bool:
+        """
+        Check if a property has at least the required days of data in all 3 metric tables.
+        Checks property_daily_metrics, page_daily_metrics, and device_daily_metrics.
+        Validates only within the window relevant to analysis (Total window - GSC lag).
+        
+        Args:
+            account_id: UUID of the account (for safety)
+            property_id: UUID of the property
+            
+        Returns:
+            True if backfill is needed (if any table is missing data), False otherwise
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            # We check the window [Analysis Days + Buffer] to see if it's already full.
+            # If any table has < REQUIRED_HISTORY_DAYS distinct dates in that window, we backfill.
+            # The window starts from 'yesterday' minus (required + buffer) to today minus lag.
+            
+            tables_to_check = [
+                'property_daily_metrics',
+                'page_daily_metrics',
+                'device_daily_metrics'
+            ]
+            
+            # Use INTERVAL '16 days' as a base check window (14 required + 2 lag)
+            # This aligns precisely with what Main.py should be ingesting normally.
+            check_interval = REQUIRED_HISTORY_DAYS + GSC_LAG_DAYS
+            
+            for table in tables_to_check:
+                query = f"""
+                    SELECT COUNT(DISTINCT m.date) as date_count
+                    FROM {table} m
+                    JOIN properties p ON m.property_id = p.id
+                    WHERE m.property_id = %s
+                      AND p.account_id = %s
+                      AND m.date BETWEEN CURRENT_DATE - INTERVAL '%s days' 
+                                   AND CURRENT_DATE - INTERVAL '%s days'
+                """
+                
+                self.cursor.execute(query, (property_id, account_id, check_interval, GSC_LAG_DAYS))
+                result = self.cursor.fetchone()
+                count = result['date_count'] if result else 0
+                
+                if count < REQUIRED_HISTORY_DAYS:
+                    print(f"[BACKFILL CHECK] {table} incomplete: found {count}/{REQUIRED_HISTORY_DAYS} days for property {property_id}")
+                    return True
+            
+            print(f"[BACKFILL CHECK] Property {property_id} has sufficient data in all tables.")
+            return False
+            
+        except psycopg2.Error as e:
+            print(f"[ERROR] check_needs_backfill failed for {property_id}: {e}")
+            raise RuntimeError(f"Database error checking backfill needs: {e}") from e
+        except Exception as e:
+            print(f"[ERROR] Failed to check backfill status for {property_id}: {e}")
+            # Err on the side of caution (don't backfill if check fails, to avoid loops)
+            return False
+
+    def insert_website(self, account_id: str, base_domain: str) -> Optional[str]:
         """
         Insert a website into the database
         Uses ON CONFLICT DO NOTHING for idempotency
         
         Args:
+            account_id: UUID of the account
             base_domain: The base domain (e.g., 'example.com')
         
         Returns:
             UUID of the website (existing or newly inserted)
         """
         try:
-            # Attempt insert with ON CONFLICT DO NOTHING
+            # Attempt insert with ON CONFLICT DO NOTHING (account_id scoped)
             self.cursor.execute("""
-                INSERT INTO websites (base_domain, display_name, created_at)
-                VALUES (%s, %s, NOW())
-                ON CONFLICT (base_domain) DO NOTHING
+                INSERT INTO websites (account_id, base_domain, display_name, created_at)
+                VALUES (%s, %s, %s, NOW())
+                ON CONFLICT (account_id, base_domain) DO NOTHING
                 RETURNING id
-            """, (base_domain, base_domain))
+            """, (account_id, base_domain, base_domain))
             
             result = self.cursor.fetchone()
             
@@ -95,15 +290,16 @@ class DatabasePersistence:
                 print(f"[INSERT] Website: {base_domain} (id: {website_id})")
                 return website_id
             else:
-                # Already exists, fetch existing ID
+                # Already exists, fetch existing ID for THIS account
                 self.cursor.execute("""
-                    SELECT id FROM websites WHERE base_domain = %s
-                """, (base_domain,))
+                    SELECT id FROM websites 
+                    WHERE account_id = %s AND base_domain = %s
+                """, (account_id, base_domain))
                 result = self.cursor.fetchone()
                 
                 if result:
                     website_id = result['id']
-                    print(f"[SKIP]   Website already exists: {base_domain} (id: {website_id})")
+                    # print(f"[SKIP]   Website already exists: {base_domain} (id: {website_id})")
                     return website_id
                 else:
                     raise RuntimeError(f"Failed to retrieve website ID for {base_domain}")
@@ -114,6 +310,7 @@ class DatabasePersistence:
     
     def insert_property(
         self, 
+        account_id: str,
         website_id: str, 
         site_url: str, 
         property_type: str, 
@@ -124,6 +321,7 @@ class DatabasePersistence:
         Uses ON CONFLICT DO NOTHING for idempotency
         
         Args:
+            account_id: UUID of the account
             website_id: UUID of the parent website
             site_url: Full GSC property URL
             property_type: "sc_domain" or "url_prefix"
@@ -133,31 +331,32 @@ class DatabasePersistence:
             UUID of the property (existing or newly inserted)
         """
         try:
-            # Attempt insert with ON CONFLICT DO NOTHING
+            # Attempt insert with ON CONFLICT DO NOTHING (account_id scoped)
             self.cursor.execute("""
-                INSERT INTO properties (website_id, site_url, property_type, permission_level, created_at)
-                VALUES (%s, %s, %s, %s, NOW())
-                ON CONFLICT (site_url) DO NOTHING
+                INSERT INTO properties (account_id, website_id, site_url, property_type, permission_level, created_at)
+                VALUES (%s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (account_id, site_url) DO NOTHING
                 RETURNING id
-            """, (website_id, site_url, property_type, permission_level))
+            """, (account_id, website_id, site_url, property_type, permission_level))
             
             result = self.cursor.fetchone()
             
             if result:
                 # New insert
                 property_id = result['id']
-                print(f"[INSERT] Property: {site_url} (type: {property_type}, permission: {permission_level})")
+                print(f"[INSERT] Property: {site_url} (id: {property_id})")
                 return property_id
             else:
                 # Already exists
                 self.cursor.execute("""
-                    SELECT id FROM properties WHERE site_url = %s
-                """, (site_url,))
+                    SELECT id FROM properties 
+                    WHERE account_id = %s AND site_url = %s
+                """, (account_id, site_url))
                 result = self.cursor.fetchone()
                 
                 if result:
                     property_id = result['id']
-                    print(f"[SKIP]   Property already exists: {site_url}")
+                    # print(f"[SKIP]   Property already exists: {site_url}")
                     return property_id
                 else:
                     raise RuntimeError(f"Failed to retrieve property ID for {site_url}")
@@ -166,26 +365,22 @@ class DatabasePersistence:
             print(f"[ERROR] Failed to insert property '{site_url}': {e}")
             raise RuntimeError(f"Database error inserting property: {e}") from e
     
-    def persist_grouped_properties(self, grouped_properties: Dict[str, List[Dict[str, Any]]]) -> Dict[str, int]:
+    def persist_grouped_properties(self, account_id: str, grouped_properties: Dict[str, List[Dict[str, Any]]]) -> Dict[str, int]:
         """
         Persist all grouped properties to database
         
         Args:
+            account_id: UUID of the account
             grouped_properties: Dictionary mapping base_domain -> list of properties
         
         Returns:
             Dictionary with counts: {'websites': int, 'properties': int}
         """
-        websites_inserted = 0
-        websites_skipped = 0
-        properties_inserted = 0
-        properties_skipped = 0
-        
         try:
             self.begin_transaction()
             
             print("\n" + "="*80)
-            print("PERSISTING TO DATABASE")
+            print(f"PERSISTING TO DATABASE for Account: {account_id}")
             print("="*80 + "\n")
             
             # Sort by base domain for consistent output
@@ -193,14 +388,10 @@ class DatabasePersistence:
                 properties = grouped_properties[base_domain]
                 
                 # Insert website
-                print(f"\nProcessing website: {base_domain}")
-                website_id = self.insert_website(base_domain)
+                website_id = self.insert_website(account_id, base_domain)
                 
                 if not website_id:
                     raise RuntimeError(f"Failed to get website_id for {base_domain}")
-                
-                # Track if this was a new insert or skip
-                # (We can infer from the log output, but for stats we'll count)
                 
                 # Insert properties for this website
                 for prop in properties:
@@ -214,6 +405,7 @@ class DatabasePersistence:
                         property_type = 'url_prefix'
                     
                     property_id = self.insert_property(
+                        account_id=account_id,
                         website_id=website_id,
                         site_url=site_url,
                         property_type=property_type,
@@ -226,19 +418,12 @@ class DatabasePersistence:
             # Commit transaction
             self.commit_transaction()
             
-            # Get final counts from database
-            self.cursor.execute("SELECT COUNT(*) as count FROM websites")
+            # Get final counts for this account
+            self.cursor.execute("SELECT COUNT(*) as count FROM websites WHERE account_id = %s", (account_id,))
             total_websites = self.cursor.fetchone()['count']
             
-            self.cursor.execute("SELECT COUNT(*) as count FROM properties")
+            self.cursor.execute("SELECT COUNT(*) as count FROM properties WHERE account_id = %s", (account_id,))
             total_properties = self.cursor.fetchone()['count']
-            
-            print("\n" + "="*80)
-            print("PERSISTENCE SUMMARY")
-            print("="*80)
-            print(f"✓ Total websites in database: {total_websites}")
-            print(f"✓ Total properties in database: {total_properties}")
-            print("="*80 + "\n")
             
             return {
                 'websites': total_websites,
@@ -251,10 +436,62 @@ class DatabasePersistence:
             self.rollback_transaction()
             raise RuntimeError(f"Persistence failed: {e}") from e
     
-    def fetch_all_properties(self) -> List[Dict[str, Any]]:
+    def persist_property_metrics(self, property_id: str, property_metrics: List[Dict[str, Any]]) -> Dict[str, int]:
         """
-        Fetch all properties from database with their base domains
+        Insert or update property-level metrics (site-wide aggregate).
+        Aligns with schema: ON CONFLICT (property_id, date)
         
+        Args:
+            property_id: UUID of the property
+            property_metrics: List of dicts with: date, clicks, impressions, ctr, position
+        """
+        if not property_metrics:
+            return {'inserted': 0, 'updated': 0}
+            
+        inserted_count = 0
+        updated_count = 0
+        
+        try:
+            for metric in property_metrics:
+                self.cursor.execute("""
+                    INSERT INTO property_daily_metrics 
+                        (property_id, date, clicks, impressions, ctr, position, created_at)
+                    VALUES 
+                        (%s, %s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (property_id, date) 
+                    DO UPDATE SET
+                        clicks = EXCLUDED.clicks,
+                        impressions = EXCLUDED.impressions,
+                        ctr = EXCLUDED.ctr,
+                        position = EXCLUDED.position
+                    RETURNING (xmax = 0) AS inserted
+                """, (
+                    property_id,
+                    metric['date'],
+                    metric.get('clicks', 0),
+                    metric.get('impressions', 0),
+                    metric.get('ctr', 0.0),
+                    metric.get('position', 0.0)
+                ))
+                
+                result = self.cursor.fetchone()
+                if result and result['inserted']:
+                    inserted_count += 1
+                else:
+                    updated_count += 1
+                    
+            return {'inserted': inserted_count, 'updated': updated_count}
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to persist property metrics: {e}")
+            raise RuntimeError(f"Database error persisting property metrics: {e}") from e
+
+    def fetch_all_properties(self, account_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch all properties for an account with their base domains
+        
+        Args:
+            account_id: UUID of the account
+            
         Returns:
             List of dictionaries with: id, site_url, base_domain, property_type, permission_level
         """
@@ -268,14 +505,15 @@ class DatabasePersistence:
                     w.base_domain
                 FROM properties p
                 JOIN websites w ON p.website_id = w.id
+                WHERE p.account_id = %s
                 ORDER BY w.base_domain, p.site_url
-            """)
+            """, (account_id,))
             
             properties = self.cursor.fetchall()
             return [dict(prop) for prop in properties]
         
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch properties: {e}")
+            print(f"[ERROR] Failed to fetch properties for account {account_id}: {e}")
             raise RuntimeError(f"Database error fetching properties: {e}") from e
     
     # ========================================
@@ -351,40 +589,43 @@ class DatabasePersistence:
         except psycopg2.Error as e:
             print(f"[ERROR] Failed to persist page metrics: {e}")
             raise RuntimeError(f"Database error persisting page metrics: {e}") from e
-            print(f"[ERROR] Failed to persist page metrics: {e}")
-            raise RuntimeError(f"Database error persisting page metrics: {e}") from e
     
-    def fetch_page_metrics_last_14_days(self, property_id: str) -> List[Dict[str, Any]]:
+    def fetch_page_metrics_for_analysis(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
         """
-        Fetch all page metrics for the last 14 days for a property
-        Used for visibility analysis
+        Fetch all page metrics required for visibility analysis.
+        Uses canonical ANALYSIS_WINDOW_DAYS + GSC_LAG_DAYS.
         
         Args:
+            account_id: UUID of the account
             property_id: UUID of the property
         
         Returns:
             List of dicts with: page_url, date, clicks, impressions, ctr, position
         """
         try:
-            self.cursor.execute("""
+            lookback_interval = ANALYSIS_WINDOW_DAYS + GSC_LAG_DAYS
+            
+            self.cursor.execute(f"""
                 SELECT 
-                    page_url,
-                    date,
-                    clicks,
-                    impressions,
-                    ctr,
-                    position
-                FROM page_daily_metrics
-                WHERE property_id = %s
-                  AND date >= CURRENT_DATE - INTERVAL '14 days'
-                ORDER BY date DESC, page_url
-            """, (property_id,))
+                    m.page_url,
+                    m.date,
+                    m.clicks,
+                    m.impressions,
+                    m.ctr,
+                    m.position
+                FROM page_daily_metrics m
+                JOIN properties p ON m.property_id = p.id
+                WHERE m.property_id = %s
+                  AND p.account_id = %s
+                  AND m.date >= CURRENT_DATE - INTERVAL '%s days'
+                ORDER BY m.date DESC, m.page_url
+            """, (property_id, account_id, lookback_interval))
             
             metrics = self.cursor.fetchall()
             return [dict(metric) for metric in metrics]
         
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch page metrics: {e}")
+            print(f"[ERROR] Failed to fetch page metrics for prop {property_id}: {e}")
             raise RuntimeError(f"Database error fetching page metrics: {e}") from e
     
     def get_page_metrics_count(self, property_id: str) -> int:
@@ -475,34 +716,45 @@ class DatabasePersistence:
             print(f"[ERROR] Failed to persist device metrics: {e}")
             raise RuntimeError(f"Database error persisting device metrics: {e}") from e
     
-    def fetch_device_metrics_last_14_days(self, property_id: str) -> List[Dict[str, Any]]:
+    def fetch_device_metrics_for_analysis(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
         """
-        Fetch last 14 days of device metrics for a property
+        Fetch metrics required for device visibility analysis.
+        Uses canonical ANALYSIS_WINDOW_DAYS + GSC_LAG_DAYS to ensure full coverage.
         
         Args:
+            account_id: UUID of the account
             property_id: UUID of the property
         
         Returns:
             List of dicts with device, date, clicks, impressions, ctr, position
         """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
         try:
-            # Fetch last 14 days (max 42 rows: 14 days * 3 devices)
-            self.cursor.execute("""
+            # We need ANALYSIS_WINDOW_DAYS of data.
+            # Since GSC has a lag, we fetch (ANALYSIS_WINDOW_DAYS + GSC_LAG_DAYS)
+            # to be absolutely sure we get the full requested window.
+            lookback_interval = ANALYSIS_WINDOW_DAYS + GSC_LAG_DAYS
+            
+            self.cursor.execute(f"""
                 SELECT 
-                    device,
-                    date,
-                    clicks,
-                    impressions,
-                    ctr,
-                    position
-                FROM device_daily_metrics
-                WHERE property_id = %s
-                ORDER BY date DESC
-                LIMIT 42
-            """, (property_id,))
+                    m.device,
+                    m.date,
+                    m.clicks,
+                    m.impressions,
+                    m.ctr,
+                    m.position
+                FROM device_daily_metrics m
+                JOIN properties p ON m.property_id = p.id
+                WHERE m.property_id = %s
+                  AND p.account_id = %s
+                  AND m.date >= CURRENT_DATE - INTERVAL '%s days'
+                ORDER BY m.date DESC, m.device
+            """, (property_id, account_id, lookback_interval))
             
             metrics = self.cursor.fetchall()
-            return [dict(metric) for metric in metrics]
+            return [dict(row) for row in metrics]
         
         except psycopg2.Error as e:
             print(f"[ERROR] Failed to fetch device metrics: {e}")
@@ -596,80 +848,74 @@ class DatabasePersistence:
             raise RuntimeError(f"Database error persisting page visibility: {e}") from e
 
 
-    def persist_device_visibility_analysis(self, property_id: str, analysis_results: dict) -> int:
+    def persist_device_visibility_analysis(
+        self, 
+        account_id: str,
+        property_id: str, 
+        analysis_results: dict
+    ) -> int:
         """
         Persist device visibility to device_visibility_analysis table.
-        
-        Strategy:
-        - Delete existing records for property_id (idempotent)
-        - Batch insert new records
-        - Return count of inserted rows
+        Strictly checked for account ownership.
         
         Args:
+            account_id: UUID of the account
             property_id: UUID of the property
-            analysis_results: Dictionary with device keys ('mobile', 'desktop', 'tablet')
-                            Each value is a dict with analysis data
+            analysis_results: Dictionary with device data
         
         Returns:
             Total number of rows inserted
-        
-        Schema:
-            - property_id (uuid)
-            - device (text): 'mobile' | 'desktop' | 'tablet'
-            - last_7_impressions (int4)
-            - prev_7_impressions (int4)
-            - delta (int4)
-            - delta_pct (numeric)
-            - classification (text): 'significant_drop' | 'significant_gain' | 'flat'
-            - created_at (timestamptz)
         """
         if not self.connection or not self.cursor:
             raise RuntimeError("Database connection not established")
         
         try:
-            # Delete existing records for this property (idempotent)
+            # 🔐 SAFETY CHECK: Validate ownership
+            self.cursor.execute("""
+                SELECT 1 FROM properties 
+                WHERE id = %s AND account_id = %s
+            """, (property_id, account_id))
+            
+            if not self.cursor.fetchone():
+                raise ValueError(f"Property {property_id} does not belong to account {account_id}")
+
+            # 🗑 IDEMPOTENT DELETE: Remove existing records for this property
             self.cursor.execute("""
                 DELETE FROM device_visibility_analysis
                 WHERE property_id = %s
             """, (property_id,))
             
-            # Prepare batch insert data
+            # 📝 BATCH INSERT: Prepare new data
             rows_to_insert = []
+            for device, data in analysis_results.items():
+                rows_to_insert.append((
+                    property_id,
+                    device,
+                    data.get('last_7_impressions', 0),
+                    data.get('prev_7_impressions', 0),
+                    data.get('delta', 0),
+                    data.get('delta_pct', 0.0),
+                    data.get('classification', 'flat')
+                ))
             
-            # Process each device
-            for device in ['mobile', 'desktop', 'tablet']:
-                device_data = analysis_results.get(device, {})
-                if device_data:  # Only insert if device has data
-                    rows_to_insert.append((
-                        property_id,
-                        device,
-                        device_data.get('last_7_impressions', 0),
-                        device_data.get('prev_7_impressions', 0),
-                        device_data.get('delta', 0),
-                        device_data.get('delta_pct', 0.0),
-                        device_data.get('classification', 'flat')
-                    ))
-            
-            # Batch insert
             if rows_to_insert:
                 execute_batch(
                     self.cursor,
                     """
                     INSERT INTO device_visibility_analysis 
-                        (property_id, device, last_7_impressions, prev_7_impressions,
+                        (property_id, device, last_7_impressions, prev_7_impressions, 
                          delta, delta_pct, classification, created_at)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                     """,
                     rows_to_insert,
-                    page_size=100
+                    page_size=10
                 )
             
             self.connection.commit()
-            
             print(f"✓ Persisted {len(rows_to_insert)} device visibility records for property {property_id}")
             return len(rows_to_insert)
         
-        except psycopg2.Error as e:
+        except (psycopg2.Error, ValueError) as e:
             self.connection.rollback()
             print(f"[ERROR] Failed to persist device visibility analysis: {e}")
             raise RuntimeError(f"Database error persisting device visibility: {e}") from e
@@ -679,10 +925,13 @@ class DatabasePersistence:
     # DATA EXPLORATION METHODS (Frontend APIs)
     # =========================================================================
 
-    def fetch_all_websites(self) -> List[Dict[str, Any]]:
+    def fetch_all_websites(self, account_id: str) -> List[Dict[str, Any]]:
         """
-        Fetch all websites from database.
+        Fetch all websites for an account.
         
+        Args:
+            account_id: UUID of the account
+            
         Returns:
             List of dicts with: id, base_domain, created_at, property_count
         """
@@ -698,23 +947,25 @@ class DatabasePersistence:
                     COUNT(p.id) as property_count
                 FROM websites w
                 LEFT JOIN properties p ON w.id = p.website_id
+                WHERE w.account_id = %s
                 GROUP BY w.id, w.base_domain, w.created_at
                 ORDER BY w.base_domain
-            """)
+            """, (account_id,))
             
             websites = self.cursor.fetchall()
             return [dict(row) for row in websites]
         
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch websites: {e}")
+            print(f"[ERROR] Failed to fetch websites for account {account_id}: {e}")
             raise RuntimeError(f"Database error fetching websites: {e}") from e
 
 
-    def fetch_properties_by_website(self, website_id: str) -> List[Dict[str, Any]]:
+    def fetch_properties_by_website(self, account_id: str, website_id: str) -> List[Dict[str, Any]]:
         """
-        Fetch all properties for a specific website.
+        Fetch all properties for a specific website within an account.
         
         Args:
+            account_id: UUID of the account
             website_id: UUID of the website
         
         Returns:
@@ -732,23 +983,24 @@ class DatabasePersistence:
                     permission_level,
                     created_at
                 FROM properties
-                WHERE website_id = %s
+                WHERE account_id = %s AND website_id = %s
                 ORDER BY site_url
-            """, (website_id,))
+            """, (account_id, website_id))
             
             properties = self.cursor.fetchall()
             return [dict(row) for row in properties]
         
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch properties: {e}")
+            print(f"[ERROR] Failed to fetch properties for website {website_id}: {e}")
             raise RuntimeError(f"Database error fetching properties: {e}") from e
 
 
-    def fetch_property_daily_metrics_for_overview(self, property_id: str) -> List[Dict[str, Any]]:
+    def fetch_property_daily_metrics_for_overview(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
         """
-        Fetch last 14 days of property metrics for 7v7 computation.
+        Fetch last 14 days of property metrics. Strictly checked for account ownership.
         
         Args:
+            account_id: UUID of the account
             property_id: UUID of the property
         
         Returns:
@@ -760,30 +1012,33 @@ class DatabasePersistence:
         try:
             self.cursor.execute("""
                 SELECT 
-                    date,
-                    clicks,
-                    impressions,
-                    ctr,
-                    position
-                FROM property_daily_metrics
-                WHERE property_id = %s
-                ORDER BY date DESC
+                    m.date,
+                    m.clicks,
+                    m.impressions,
+                    m.ctr,
+                    m.position
+                FROM property_daily_metrics m
+                JOIN properties p ON m.property_id = p.id
+                WHERE m.property_id = %s AND p.account_id = %s
+                ORDER BY m.date DESC
                 LIMIT 14
-            """, (property_id,))
+            """, (property_id, account_id))
             
             metrics = self.cursor.fetchall()
             return [dict(row) for row in metrics]
         
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch property metrics: {e}")
+            print(f"[ERROR] Failed to fetch property metrics for prop {property_id}: {e}")
             raise RuntimeError(f"Database error fetching property metrics: {e}") from e
 
 
-    def fetch_page_visibility_analysis(self, property_id: str) -> List[Dict[str, Any]]:
+    def fetch_page_visibility_analysis(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
         """
         Fetch page visibility analysis for a property.
+        Strictly checked for account ownership.
         
         Args:
+            account_id: UUID of the account
             property_id: UUID of the property
         
         Returns:
@@ -796,31 +1051,29 @@ class DatabasePersistence:
         try:
             self.cursor.execute("""
                 SELECT 
-                    category,
-                    page_url,
-                    impressions_last_7,
-                    impressions_prev_7,
-                    delta,
-                    delta_pct,
-                    created_at
-                FROM page_visibility_analysis
-                WHERE property_id = %s
-                ORDER BY category, delta DESC
-            """, (property_id,))
+                    v.category, v.page_url, v.impressions_last_7, 
+                    v.impressions_prev_7, v.delta, v.delta_pct
+                FROM page_visibility_analysis v
+                JOIN properties p ON v.property_id = p.id
+                WHERE v.property_id = %s AND p.account_id = %s
+                ORDER BY v.delta_pct ASC
+            """, (property_id, account_id))
             
-            analysis = self.cursor.fetchall()
-            return [dict(row) for row in analysis]
+            results = self.cursor.fetchall()
+            return [dict(row) for row in results]
         
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch page visibility: {e}")
-            raise RuntimeError(f"Database error fetching page visibility: {e}") from e
+            print(f"[ERROR] Failed to fetch page visibility analysis: {e}")
+            raise RuntimeError(f"Database error fetching page visibility analysis: {e}") from e
 
 
-    def fetch_device_visibility_analysis(self, property_id: str) -> List[Dict[str, Any]]:
+    def fetch_device_visibility_analysis(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
         """
         Fetch device visibility analysis for a property.
+        Strictly checked for account ownership.
         
         Args:
+            account_id: UUID of the account
             property_id: UUID of the property
         
         Returns:
@@ -833,24 +1086,20 @@ class DatabasePersistence:
         try:
             self.cursor.execute("""
                 SELECT 
-                    device,
-                    last_7_impressions,
-                    prev_7_impressions,
-                    delta,
-                    delta_pct,
-                    classification,
-                    created_at
-                FROM device_visibility_analysis
-                WHERE property_id = %s
-                ORDER BY device
-            """, (property_id,))
+                    v.device, v.last_7_impressions, v.prev_7_impressions,
+                    v.delta, v.delta_pct, v.classification
+                FROM device_visibility_analysis v
+                JOIN properties p ON v.property_id = p.id
+                WHERE v.property_id = %s AND p.account_id = %s
+                ORDER BY v.delta_pct ASC
+            """, (property_id, account_id))
             
-            analysis = self.cursor.fetchall()
-            return [dict(row) for row in analysis]
+            results = self.cursor.fetchall()
+            return [dict(row) for row in results]
         
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch device visibility: {e}")
-            raise RuntimeError(f"Database error fetching device visibility: {e}") from e
+            print(f"[ERROR] Failed to fetch device visibility analysis: {e}")
+            raise RuntimeError(f"Database error fetching device visibility analysis: {e}") from e
 
 
     # =========================================================================
@@ -859,6 +1108,7 @@ class DatabasePersistence:
 
     def insert_alert(
         self, 
+        account_id: str,
         property_id: str, 
         alert_type: str,
         prev_7_impressions: int,
@@ -866,17 +1116,7 @@ class DatabasePersistence:
         delta_pct: float
     ) -> str:
         """
-        Insert an alert into the alerts table.
-        
-        Args:
-            property_id: UUID of the property
-            alert_type: Type of alert (e.g., 'impression_drop')
-            prev_7_impressions: Previous 7-day impressions
-            last_7_impressions: Last 7-day impressions
-            delta_pct: Percentage change
-        
-        Returns:
-            UUID of the inserted alert
+        Insert a scoped alert into the alerts table.
         """
         if not self.connection or not self.cursor:
             raise RuntimeError("Database connection not established")
@@ -884,30 +1124,22 @@ class DatabasePersistence:
         try:
             self.cursor.execute("""
                 INSERT INTO alerts 
-                    (property_id, alert_type, prev_7_impressions, last_7_impressions, 
+                    (account_id, property_id, alert_type, prev_7_impressions, last_7_impressions, 
                      delta_pct, triggered_at, email_sent)
-                VALUES (%s, %s, %s, %s, %s, NOW(), false)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW(), false)
                 RETURNING id
-            """, (property_id, alert_type, prev_7_impressions, last_7_impressions, delta_pct))
+            """, (account_id, property_id, alert_type, prev_7_impressions, last_7_impressions, delta_pct))
             
             result = self.cursor.fetchone()
             self.connection.commit()
-            
             return result['id']
-        
         except psycopg2.Error as e:
             self.connection.rollback()
             print(f"[ERROR] Failed to insert alert: {e}")
             raise RuntimeError(f"Database error inserting alert: {e}") from e
 
-
-    def fetch_alert_recipients(self) -> List[str]:
-        """
-        Fetch all alert recipients from alert_recipients table.
-        
-        Returns:
-            List of email addresses
-        """
+    def fetch_alert_recipients(self, account_id: str) -> List[str]:
+        """Fetch alert recipients for a specific account."""
         if not self.connection or not self.cursor:
             raise RuntimeError("Database connection not established")
         
@@ -915,14 +1147,14 @@ class DatabasePersistence:
             self.cursor.execute("""
                 SELECT email
                 FROM alert_recipients
+                WHERE account_id = %s
                 ORDER BY created_at
-            """)
+            """, (account_id,))
             
             recipients = self.cursor.fetchall()
             return [row['email'] for row in recipients]
-        
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch alert recipients: {e}")
+            print(f"[ERROR] Failed to fetch recipients for account {account_id}: {e}")
             raise RuntimeError(f"Database error fetching alert recipients: {e}") from e
 
 
@@ -951,11 +1183,13 @@ class DatabasePersistence:
             raise RuntimeError(f"Database error marking alert email sent: {e}") from e
 
 
-    def fetch_alert_details(self, alert_id: str) -> Dict[str, Any]:
+    def fetch_alert_details(self, account_id: str, alert_id: str) -> Dict[str, Any]:
         """
         Fetch alert details including property URL.
+        Strictly checked for account ownership.
         
         Args:
+            account_id: UUID of the account
             alert_id: UUID of the alert
         
         Returns:
@@ -968,23 +1202,18 @@ class DatabasePersistence:
         try:
             self.cursor.execute("""
                 SELECT 
-                    a.id as alert_id,
-                    a.property_id,
-                    p.site_url,
-                    a.alert_type,
-                    a.prev_7_impressions,
-                    a.last_7_impressions,
-                    a.delta_pct,
+                    a.id as alert_id, a.property_id, p.site_url, a.alert_type, 
+                    a.prev_7_impressions, a.last_7_impressions, a.delta_pct,
                     a.triggered_at
                 FROM alerts a
                 JOIN properties p ON a.property_id = p.id
-                WHERE a.id = %s
-            """, (alert_id,))
+                WHERE a.id = %s AND a.account_id = %s
+            """, (alert_id, account_id))
             
             result = self.cursor.fetchone()
             
             if not result:
-                raise RuntimeError(f"Alert not found: {alert_id}")
+                raise ValueError(f"Alert {alert_id} not found for account {account_id}")
             
             return dict(result)
         
@@ -1025,82 +1254,61 @@ class DatabasePersistence:
             raise RuntimeError(f"Database error fetching property URL: {e}") from e
 
 
-    def fetch_pending_alerts(self) -> List[Dict[str, Any]]:
+    def fetch_pending_alerts(self, account_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Fetch all alerts where email_sent = false.
-        
-        Used by alert dispatcher to send pending emails.
-        
-        Returns:
-            List of alert dicts with: id, property_id, site_url, alert_type,
-                                     prev_7_impressions, last_7_impressions, delta_pct
+        Optional account_id scoping.
         """
         if not self.connection or not self.cursor:
             raise RuntimeError("Database connection not established")
         
         try:
-            self.cursor.execute("""
+            query = """
                 SELECT 
-                    a.id,
-                    a.property_id,
-                    a.alert_type,
-                    a.prev_7_impressions,
-                    a.last_7_impressions,
-                    a.delta_pct,
-                    a.triggered_at,
-                    p.site_url
+                    a.id, a.account_id, a.property_id, a.alert_type,
+                    a.prev_7_impressions, a.last_7_impressions, a.delta_pct,
+                    a.triggered_at, p.site_url
                 FROM alerts a
                 JOIN properties p ON a.property_id = p.id
                 WHERE a.email_sent = false
-                ORDER BY a.triggered_at ASC
-            """)
+            """
+            params = []
+            if account_id:
+                query += " AND a.account_id = %s"
+                params.append(account_id)
             
+            query += " ORDER BY a.triggered_at ASC"
+            
+            self.cursor.execute(query, tuple(params))
             alerts = self.cursor.fetchall()
             return [dict(row) for row in alerts]
-        
         except psycopg2.Error as e:
             print(f"[ERROR] Failed to fetch pending alerts: {e}")
             raise RuntimeError(f"Database error fetching pending alerts: {e}") from e
 
 
-    def fetch_recent_alerts(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """
-        Fetch recent alerts for frontend display.
-        
-        Args:
-            limit: Maximum number of alerts to return
-        
-        Returns:
-            List of alert dicts with: id, property_id, site_url, alert_type,
-                                     prev_7_impressions, last_7_impressions, delta_pct,
-                                     triggered_at, email_sent
-        """
+    def fetch_recent_alerts(self, account_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Fetch recent alerts for a specific account."""
         if not self.connection or not self.cursor:
             raise RuntimeError("Database connection not established")
         
         try:
             self.cursor.execute("""
                 SELECT 
-                    a.id,
-                    a.property_id,
-                    a.alert_type,
-                    a.prev_7_impressions,
-                    a.last_7_impressions,
-                    a.delta_pct,
-                    a.triggered_at,
-                    a.email_sent,
-                    p.site_url
+                    a.id, a.property_id, a.alert_type,
+                    a.prev_7_impressions, a.last_7_impressions, a.delta_pct,
+                    a.triggered_at, a.email_sent, p.site_url
                 FROM alerts a
                 JOIN properties p ON a.property_id = p.id
+                WHERE a.account_id = %s
                 ORDER BY a.triggered_at DESC
                 LIMIT %s
-            """, (limit,))
+            """, (account_id, limit))
             
             alerts = self.cursor.fetchall()
             return [dict(row) for row in alerts]
-        
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch recent alerts: {e}")
+            print(f"[ERROR] Failed to fetch recent alerts for account {account_id}: {e}")
             raise RuntimeError(f"Database error fetching recent alerts: {e}") from e
 
 
@@ -1108,36 +1316,92 @@ class DatabasePersistence:
     # PIPELINE STATE MANAGEMENT
     # ========================================================================
 
-    def ensure_pipeline_runs_table(self) -> None:
-        """
-        Create pipeline_runs table if it doesn't exist.
-        Called automatically on connect().
-        """
+    # ==========================
+    # PIPELINE STATE MANAGEMENT
+    # ==========================
+
+    def fetch_pipeline_state(self, account_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch the latest pipeline run state for an account."""
         try:
             self.cursor.execute("""
-                CREATE TABLE IF NOT EXISTS pipeline_runs (
-                    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-                    is_running BOOLEAN DEFAULT false,
-                    phase TEXT DEFAULT 'idle',
-                    current_step TEXT,
-                    progress_current INTEGER DEFAULT 0,
-                    progress_total INTEGER DEFAULT 0,
-                    completed_steps TEXT[] DEFAULT '{}',
-                    error TEXT,
-                    started_at TIMESTAMPTZ,
-                    completed_at TIMESTAMPTZ,
-                    updated_at TIMESTAMPTZ DEFAULT now()
-                )
-            """)
-            self.connection.commit()
+                SELECT 
+                    id, is_running, phase, current_step,
+                    progress_current, progress_total,
+                    completed_steps, error, started_at,
+                    completed_at, updated_at
+                FROM pipeline_runs
+                WHERE account_id = %s
+                ORDER BY updated_at DESC
+                LIMIT 1
+            """, (account_id,))
+            
+            row = self.cursor.fetchone()
+            if not row:
+                return {
+                    "is_running": False,
+                    "phase": "idle",
+                    "current_step": None,
+                    "progress": {"current": 0, "total": 0},
+                    "completed_steps": [],
+                    "error": None,
+                    "started_at": None
+                }
+            
+            return {
+                "id": row['id'],
+                "is_running": row['is_running'],
+                "phase": row['phase'],
+                "current_step": row['current_step'],
+                "progress": {
+                    "current": row['progress_current'] or 0,
+                    "total": row['progress_total'] or 0
+                },
+                "completed_steps": row['completed_steps'] or [],
+                "error": row['error'],
+                "started_at": row['started_at'].isoformat() if row['started_at'] else None
+            }
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to create pipeline_runs table: {e}")
-            raise RuntimeError(f"Database error creating pipeline_runs table: {e}") from e
+            print(f"[ERROR] Failed to fetch pipeline state for account {account_id}: {e}")
+            raise RuntimeError(f"Database error fetching pipeline state: {e}") from e
 
+    def start_pipeline_run(self, account_id: str) -> str:
+        """
+        Start a new pipeline run for an account.
+        Implements the FOR UPDATE locking strategy.
+        """
+        try:
+            self.begin_transaction()
+            
+            # 1. Check for active run with lock
+            self.cursor.execute("""
+                SELECT id FROM pipeline_runs 
+                WHERE account_id = %s AND is_running = true 
+                FOR UPDATE
+            """, (account_id,))
+            
+            active_run = self.cursor.fetchone()
+            if active_run:
+                self.rollback_transaction()
+                raise RuntimeError("Pipeline is already running for this account")
+            
+            # 2. Insert new run
+            self.cursor.execute("""
+                INSERT INTO pipeline_runs (account_id, is_running, phase, started_at, updated_at)
+                VALUES (%s, true, 'setup', NOW(), NOW())
+                RETURNING id
+            """, (account_id,))
+            
+            run_id = self.cursor.fetchone()['id']
+            self.commit_transaction()
+            return run_id
+        except Exception as e:
+            self.rollback_transaction()
+            raise e
 
-    def upsert_pipeline_state(
+    def update_pipeline_state(
         self,
-        run_id: Optional[str] = None,
+        account_id: str,
+        run_id: str,
         is_running: Optional[bool] = None,
         phase: Optional[str] = None,
         current_step: Optional[str] = None,
@@ -1145,39 +1409,12 @@ class DatabasePersistence:
         progress_total: Optional[int] = None,
         completed_steps: Optional[List[str]] = None,
         error: Optional[str] = None,
-        started_at: Optional[str] = None,
-        completed_at: Optional[str] = None
-    ) -> str:
+        completed_at: Optional[datetime] = None
+    ) -> None:
         """
-        Insert or update pipeline state in database.
-        
-        Args:
-            run_id: Pipeline run ID (auto-generated if None)
-            is_running: Whether pipeline is currently running
-            phase: Current phase (idle/ingestion/analysis/completed/failed)
-            current_step: Current step description
-            progress_current: Current progress count
-            progress_total: Total progress count
-            completed_steps: List of completed step names
-            error: Error message if failed
-            started_at: ISO timestamp when started
-            completed_at: ISO timestamp when completed
-        
-        Returns:
-            run_id: The ID of the pipeline run
+        Update an existing pipeline run state.
         """
         try:
-            # If no run_id, fetch or create latest
-            if run_id is None:
-                self.cursor.execute("""
-                    SELECT id FROM pipeline_runs 
-                    ORDER BY updated_at DESC 
-                    LIMIT 1
-                """)
-                row = self.cursor.fetchone()
-                run_id = row['id'] if row else None
-            
-            # Build dynamic update based on provided args
             updates = []
             params = []
             
@@ -1202,98 +1439,23 @@ class DatabasePersistence:
             if error is not None:
                 updates.append("error = %s")
                 params.append(error)
-            if started_at is not None:
-                updates.append("started_at = %s")
-                params.append(started_at)
             if completed_at is not None:
                 updates.append("completed_at = %s")
                 params.append(completed_at)
             
             updates.append("updated_at = now()")
             
-            if run_id:
-                # Update existing run
-                query = f"""
-                    UPDATE pipeline_runs 
-                    SET {', '.join(updates)}
-                    WHERE id = %s
-                    RETURNING id
-                """
-                params.append(run_id)
-                self.cursor.execute(query, tuple(params))
-            else:
-                # Insert new run
-                query = f"""
-                    INSERT INTO pipeline_runs ({', '.join([u.split(' = ')[0] for u in updates if '=' in u])})
-                    VALUES ({', '.join(['%s'] * len(params))})
-                    RETURNING id
-                """
-                self.cursor.execute(query, tuple(params))
+            query = f"""
+                UPDATE pipeline_runs 
+                SET {', '.join(updates)}
+                WHERE id = %s AND account_id = %s
+            """
+            params.extend([run_id, account_id])
             
+            self.cursor.execute(query, tuple(params))
             self.connection.commit()
-            
-            result = self.cursor.fetchone()
-            return result['id'] if result else run_id
-        
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to upsert pipeline state: {e}")
-            raise RuntimeError(f"Database error upserting pipeline state: {e}") from e
-
-
-    def fetch_pipeline_state(self) -> Optional[Dict[str, Any]]:
-        """
-        Fetch the latest pipeline run state from database.
-        
-        Returns:
-            Dict with pipeline state or None if no runs exist
-        """
-        try:
-            self.cursor.execute("""
-                SELECT 
-                    id,
-                    is_running,
-                    phase,
-                    current_step,
-                    progress_current,
-                    progress_total,
-                    completed_steps,
-                    error,
-                    started_at,
-                    completed_at,
-                    updated_at
-                FROM pipeline_runs
-                ORDER BY updated_at DESC
-                LIMIT 1
-            """)
-            
-            row = self.cursor.fetchone()
-            if not row:
-                # No runs exist yet, return default idle state
-                return {
-                    "is_running": False,
-                    "phase": "idle",
-                    "current_step": None,
-                    "progress": {"current": 0, "total": 0},
-                    "completed_steps": [],
-                    "error": None,
-                    "started_at": None
-                }
-            
-            return {
-                "id": row['id'],
-                "is_running": row['is_running'],
-                "phase": row['phase'],
-                "current_step": row['current_step'],
-                "progress": {
-                    "current": row['progress_current'] or 0,
-                    "total": row['progress_total'] or 0
-                },
-                "completed_steps": row['completed_steps'] or [],
-                "error": row['error'],
-                "started_at": row['started_at'].isoformat() if row['started_at'] else None
-            }
-        
-        except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch pipeline state: {e}")
-            raise RuntimeError(f"Database error fetching pipeline state: {e}") from e
+            self.connection.rollback()
+            print(f"[ERROR] Failed to update pipeline state: {e}")
+            raise RuntimeError(f"Database error updating pipeline state: {e}") from e
 
