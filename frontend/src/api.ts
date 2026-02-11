@@ -1,12 +1,9 @@
 /**
  * API client for GSC Quick View backend
- * 
- * All requests go through /api proxy (configured in vite.config.ts)
- * which forwards to http://localhost:8000
+ * Multi-Account Aware
  */
 
 import type {
-    AuthStatus,
     PipelineStatus,
     Website,
     Property,
@@ -21,7 +18,7 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE}${url}`, {
         headers: {
             'Content-Type': 'application/json',
-            ...options?.headers,
+            ...(options?.headers || {}),
         },
         ...options,
     });
@@ -34,36 +31,43 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     return response.json();
 }
 
-// Authentication
 export const api = {
     auth: {
-        getStatus: () => fetchJson<AuthStatus>('/auth/status'),
-        login: () => fetchJson<{ status: string }>('/auth/login', { method: 'POST' }),
+        // New Web-based OAuth methods
+        // Backend now controls the redirect_uri hardcoded to its own callback
+        getAuthUrl: () =>
+            fetchJson<{ url: string }>(`/auth/google/url`),
+
+        // handleCallback removed: backend now handles the redirect directly 
+        // and sends user back to frontend with account info in URL params.
     },
 
     pipeline: {
-        getStatus: () => fetchJson<PipelineStatus>('/pipeline/status'),
-        run: () => fetchJson<{ status: string }>('/pipeline/run', { method: 'POST' }),
+        getStatus: (accountId: string) =>
+            fetchJson<PipelineStatus>(`/pipeline/status?account_id=${accountId}`),
+        run: (accountId: string) =>
+            fetchJson<{ status: string }>(`/pipeline/run?account_id=${accountId}`, { method: 'POST' }),
     },
 
     websites: {
-        getAll: () => fetchJson<Website[]>('/websites'),
-        getProperties: (websiteId: string) =>
-            fetchJson<Property[]>(`/websites/${websiteId}/properties`),
+        getAll: (accountId: string) =>
+            fetchJson<Website[]>(`/websites?account_id=${accountId}`),
+        getProperties: (accountId: string, websiteId: string) =>
+            fetchJson<Property[]>(`/websites/${websiteId}/properties?account_id=${accountId}`),
     },
 
     properties: {
-        getOverview: (propertyId: string) =>
-            fetchJson<PropertyOverview>(`/properties/${propertyId}/overview`),
-        getPages: (propertyId: string) =>
-            fetchJson<PageVisibilityResponse>(`/properties/${propertyId}/pages`),
-        getDevices: (propertyId: string) =>
-            fetchJson<DeviceVisibilityResponse>(`/properties/${propertyId}/devices`),
+        getOverview: (accountId: string, propertyId: string) =>
+            fetchJson<PropertyOverview>(`/properties/${propertyId}/overview?account_id=${accountId}`),
+        getPages: (accountId: string, propertyId: string) =>
+            fetchJson<PageVisibilityResponse>(`/properties/${propertyId}/pages?account_id=${accountId}`),
+        getDevices: (accountId: string, propertyId: string) =>
+            fetchJson<DeviceVisibilityResponse>(`/properties/${propertyId}/devices?account_id=${accountId}`),
     },
 
     alerts: {
-        getAll: (limit: number = 20) =>
-            fetchJson<any[]>(`/alerts?limit=${limit}`),
+        getAll: (accountId: string, limit: number = 20) =>
+            fetchJson<any[]>(`/alerts?account_id=${accountId}&limit=${limit}`),
     },
 };
 

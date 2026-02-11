@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
+import { useAuth } from '../AuthContext';
 import type { Website, Property } from '../types';
 import PropertyDashboard from './PropertyDashboard';
 import AlertsPage from './AlertsPage';
 
 export default function DataExplorer() {
+    const { accountId } = useAuth();
     const [websites, setWebsites] = useState<Website[]>([]);
     const [selectedWebsite, setSelectedWebsite] = useState<Website | null>(null);
     const [properties, setProperties] = useState<Property[]>([]);
@@ -15,10 +17,12 @@ export default function DataExplorer() {
 
     // Fetch websites on mount
     useEffect(() => {
+        if (!accountId) return;
+
         const fetchWebsites = async () => {
             try {
                 setIsLoading(true);
-                const data = await api.websites.getAll();
+                const data = await api.websites.getAll(accountId);
                 setWebsites(data);
                 // Auto-select first website if available
                 if (data.length > 0) {
@@ -31,11 +35,11 @@ export default function DataExplorer() {
             }
         };
         fetchWebsites();
-    }, []);
+    }, [accountId]);
 
     // Fetch properties when website changes
     useEffect(() => {
-        if (!selectedWebsite) {
+        if (!selectedWebsite || !accountId) {
             setProperties([]);
             setSelectedProperty(null);
             return;
@@ -43,7 +47,7 @@ export default function DataExplorer() {
 
         const fetchProperties = async () => {
             try {
-                const data = await api.websites.getProperties(selectedWebsite.id);
+                const data = await api.websites.getProperties(accountId, selectedWebsite.id);
                 setProperties(data);
                 // Auto-select first property
                 if (data.length > 0) {
@@ -55,7 +59,9 @@ export default function DataExplorer() {
             }
         };
         fetchProperties();
-    }, [selectedWebsite]);
+    }, [selectedWebsite, accountId]);
+
+    if (!accountId) return null;
 
     if (isLoading) {
         return (
@@ -81,8 +87,8 @@ export default function DataExplorer() {
                     <button
                         onClick={() => setActiveTab('properties')}
                         className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'properties'
-                                ? 'border-blue-500 text-blue-400'
-                                : 'border-transparent text-slate-400 hover:text-slate-300'
+                            ? 'border-blue-500 text-blue-400'
+                            : 'border-transparent text-slate-400 hover:text-slate-300'
                             }`}
                     >
                         Property Analytics
@@ -90,8 +96,8 @@ export default function DataExplorer() {
                     <button
                         onClick={() => setActiveTab('alerts')}
                         className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'alerts'
-                                ? 'border-blue-500 text-blue-400'
-                                : 'border-transparent text-slate-400 hover:text-slate-300'
+                            ? 'border-blue-500 text-blue-400'
+                            : 'border-transparent text-slate-400 hover:text-slate-300'
                             }`}
                     >
                         Alerts

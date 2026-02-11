@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
+import { useAuth } from '../AuthContext';
 
 interface Alert {
     id: string;
@@ -14,14 +15,16 @@ interface Alert {
 }
 
 export default function AlertsPage() {
+    const { accountId } = useAuth();
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const fetchAlerts = async () => {
+        if (!accountId) return;
         try {
             setError(null);
-            const data = await api.alerts.getAll();
+            const data = await api.alerts.getAll(accountId);
             setAlerts(data);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to fetch alerts');
@@ -36,7 +39,7 @@ export default function AlertsPage() {
         // Auto-refresh every 5 seconds to show real-time email status changes
         const interval = setInterval(fetchAlerts, 5000);
         return () => clearInterval(interval);
-    }, []);
+    }, [accountId]);
 
     const formatDate = (isoString: string) => {
         const date = new Date(isoString);

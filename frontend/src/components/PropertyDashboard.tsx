@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
+import { useAuth } from '../AuthContext';
 import type { Property, PropertyOverview, PageVisibilityResponse, DeviceVisibilityResponse } from '../types';
 
 interface PropertyDashboardProps {
@@ -7,19 +8,22 @@ interface PropertyDashboardProps {
 }
 
 export default function PropertyDashboard({ property }: PropertyDashboardProps) {
+    const { accountId } = useAuth();
     const [overview, setOverview] = useState<PropertyOverview | null>(null);
     const [pages, setPages] = useState<PageVisibilityResponse | null>(null);
     const [devices, setDevices] = useState<DeviceVisibilityResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        if (!property.id || !accountId) return;
+
         const fetchAll = async () => {
             setIsLoading(true);
             try {
                 const [overviewData, pagesData, devicesData] = await Promise.all([
-                    api.properties.getOverview(property.id),
-                    api.properties.getPages(property.id),
-                    api.properties.getDevices(property.id),
+                    api.properties.getOverview(accountId, property.id),
+                    api.properties.getPages(accountId, property.id),
+                    api.properties.getDevices(accountId, property.id),
                 ]);
                 setOverview(overviewData);
                 setPages(pagesData);
@@ -31,7 +35,7 @@ export default function PropertyDashboard({ property }: PropertyDashboardProps) 
             }
         };
         fetchAll();
-    }, [property.id]);
+    }, [property.id, accountId]);
 
     if (isLoading) {
         return (
@@ -86,7 +90,7 @@ export default function PropertyDashboard({ property }: PropertyDashboardProps) 
                     <h2 className="text-lg font-semibold text-white mb-4">Device Performance</h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {['mobile', 'desktop', 'tablet'].map((deviceName) => {
-                            const device = devices.devices[deviceName];
+                            const device = devices.devices ? devices.devices[deviceName] : null;
                             if (!device) return null;
 
                             const classColor = {
@@ -124,19 +128,19 @@ export default function PropertyDashboard({ property }: PropertyDashboardProps) 
                     {/* Summary tabs */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
                         <div className="bg-green-900/30 border border-green-800 rounded-lg p-3 text-center">
-                            <p className="text-2xl font-bold text-green-400">{pages.totals.new}</p>
+                            <p className="text-2xl font-bold text-green-400">{pages.totals?.new || 0}</p>
                             <p className="text-xs text-green-300">New Pages</p>
                         </div>
                         <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 text-center">
-                            <p className="text-2xl font-bold text-red-400">{pages.totals.lost}</p>
+                            <p className="text-2xl font-bold text-red-400">{pages.totals?.lost || 0}</p>
                             <p className="text-xs text-red-300">Lost Pages</p>
                         </div>
                         <div className="bg-green-900/30 border border-green-800 rounded-lg p-3 text-center">
-                            <p className="text-2xl font-bold text-green-400">{pages.totals.gain}</p>
+                            <p className="text-2xl font-bold text-green-400">{pages.totals?.gain || 0}</p>
                             <p className="text-xs text-green-300">Gaining</p>
                         </div>
                         <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 text-center">
-                            <p className="text-2xl font-bold text-red-400">{pages.totals.drop}</p>
+                            <p className="text-2xl font-bold text-red-400">{pages.totals?.drop || 0}</p>
                             <p className="text-xs text-red-300">Dropping</p>
                         </div>
                     </div>
@@ -154,7 +158,7 @@ export default function PropertyDashboard({ property }: PropertyDashboardProps) 
                                                 {page.page_url.replace(/^https?:\/\/[^/]+/, '')}
                                             </span>
                                             <span className="text-red-400 ml-2 whitespace-nowrap">
-                                                {page.delta} ({page.delta_pct?.toFixed(1)}%)
+                                                {page.delta || 0} ({page.delta_pct?.toFixed(1) || '0.0'}%)
                                             </span>
                                         </div>
                                     ))}
@@ -173,7 +177,7 @@ export default function PropertyDashboard({ property }: PropertyDashboardProps) 
                                                 {page.page_url.replace(/^https?:\/\/[^/]+/, '')}
                                             </span>
                                             <span className="text-green-400 ml-2 whitespace-nowrap">
-                                                +{page.delta} (+{page.delta_pct?.toFixed(1)}%)
+                                                +{page.delta || 0} (+{page.delta_pct?.toFixed(1) || '0.0'}%)
                                             </span>
                                         </div>
                                     ))}

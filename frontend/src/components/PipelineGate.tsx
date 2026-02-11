@@ -1,5 +1,7 @@
-import { useState, useEffect, ReactNode } from 'react';
+import { useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import api from '../api';
+import { useAuth } from '../AuthContext';
 import type { PipelineStatus } from '../types';
 
 interface PipelineGateProps {
@@ -7,13 +9,15 @@ interface PipelineGateProps {
 }
 
 export default function PipelineGate({ children }: PipelineGateProps) {
+    const { accountId } = useAuth();
     const [status, setStatus] = useState<PipelineStatus | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isStarting, setIsStarting] = useState(false);
 
     const pollStatus = async () => {
+        if (!accountId) return;
         try {
-            const data = await api.pipeline.getStatus();
+            const data = await api.pipeline.getStatus(accountId);
             setStatus(data);
             return data;
         } catch (err) {
@@ -24,21 +28,22 @@ export default function PipelineGate({ children }: PipelineGateProps) {
 
     useEffect(() => {
         pollStatus();
-    }, []);
+    }, [accountId]);
 
     // Poll while running
     useEffect(() => {
-        if (!status?.is_running) return;
+        if (!status?.is_running || !accountId) return;
 
         const interval = setInterval(pollStatus, 1500);
         return () => clearInterval(interval);
-    }, [status?.is_running]);
+    }, [status?.is_running, accountId]);
 
     const handleRunPipeline = async () => {
+        if (!accountId) return;
         try {
             setIsStarting(true);
             setError(null);
-            await api.pipeline.run();
+            await api.pipeline.run(accountId);
             // Poll immediately after starting
             await pollStatus();
         } catch (err) {
