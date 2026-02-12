@@ -1,82 +1,66 @@
-# GSC Quick View - Backend
+# GSC Quick View - Backend API & Pipeline
 
-FastAPI backend for Google Search Console analytics pipeline.
+This is the backend for the GSC Quick View tool. It handles OAuth 2.0 authentication, Google Search Console data ingestion, visibility analysis, and automated email alerting.
 
-## Tech Stack
+## 🚀 Getting Started
 
-- **Python 3.10+**
-- **FastAPI** for HTTP API
-- **PostgreSQL** (Supabase)
-- **Google Search Console API**
+### 1. Prerequisites
+- Python 3.10+
+- PostgreSQL (or Supabase)
+- Google Cloud Console Project with Search Console API enabled.
 
-## Quick Start
+### 2. Environment Configuration
+Create a `.env` file in the `src` directory with the following variables:
+```env
+# Database
+DATABASE_URL=your_postgresql_connection_string
 
+# Google OAuth
+GOOGLE_CLIENT_ID=your_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your_secret
+
+# Alerting (SMTP)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_email@gmail.com
+SMTP_PASSWORD=your_app_password
+SMTP_FROM_EMAIL=your_email@gmail.com
+```
+
+### 3. Install Dependencies
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # macOS/Linux
+cd src
+pip install -r ../requirements.txt
+```
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Set up environment variables
-cp .env.example .env
-# Edit .env with your Supabase credentials
-
-# Run the server
+### 4. Run API Server
+Start the FastAPI server using Uvicorn:
+```bash
 uvicorn api:app --reload
 ```
+The API documentation will be available at `http://localhost:8000/docs`.
 
-## Environment Variables
+## ⚙️ Background Processes
 
-Create `.env` in the `src/` folder:
-
-```env
-SUPABASE_DB_URL=postgresql://user:password@host:port/database
+### Alert Dispatcher (Cron)
+The tool uses a background dispatcher to send emails. It's recommended to run this via `cron` every 5 minutes:
+```bash
+*/5 * * * * cd /path/to/src && /path/to/venv/bin/python3 alert_dispatcher.py >> ../logs/dispatcher.log 2>&1
 ```
 
-## API Endpoints
+## 📂 Core Modules
 
-### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/auth/status` | Check GSC authentication |
-| POST | `/auth/login` | Trigger Google OAuth |
+- `main.py`: The central pipeline runner (Sync -> Ingest -> Analyze).
+- `auth_handler.py`: Manages OAuth flows and token persistence.
+- `gsc_client.py`: Thread-safe wrapper for the Google GSC API.
+- `db_persistence.py`: All SQL logic, strictly scoped by `account_id`.
+- `alert_detector.py`: Logic for identifying significant impression drops.
+- `alert_dispatcher.py`: Background worker for sending emails to account-level recipients.
 
-### Pipeline
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/pipeline/status` | Get pipeline execution status |
-| POST | `/pipeline/run` | Execute the full pipeline |
+## 📡 API Endpoints
 
-### Data Exploration
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/websites` | List all websites |
-| GET | `/websites/{id}/properties` | Properties for website |
-| GET | `/properties/{id}/overview` | 7v7 comparison (computed) |
-| GET | `/properties/{id}/pages` | Page visibility analysis |
-| GET | `/properties/{id}/devices` | Device visibility analysis |
-
-## Pipeline Architecture
-
-```
-Phase 0 (Sequential): Auth + Property Sync
-    ↓
-Phase 1 (Sequential): Property/Page/Device Ingestion
-    ↓                  (GSC API is NOT thread-safe)
-Phase 2 (Parallel): Page/Device Visibility Analysis
-    ↓                (DB operations are thread-safe)
-Complete
-```
-
-## Database Schema
-
-Key tables:
-- `websites` - Base domains
-- `properties` - GSC properties (sites)
-- `property_daily_metrics` - Daily aggregates
-- `page_daily_metrics` - Per-page metrics
-- `device_daily_metrics` - Per-device metrics
-- `page_visibility_analysis` - Computed page changes
-- `device_visibility_analysis` - Computed device changes
+- `GET /auth/google/url`: Get the Google Login URL.
+- `POST /pipeline/run`: Trigger a data sync for an account.
+- `GET /websites`: List grouped domains for the account.
+- `GET /alert-recipients`: Manage email notification settings.
+- `GET /properties/{id}/overview`: Get 7v7 performance deltas.

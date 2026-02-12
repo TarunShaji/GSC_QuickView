@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import type { Website, Property } from '../types';
 import PropertyDashboard from './PropertyDashboard';
 import AlertsPage from './AlertsPage';
+import SettingsPage from './SettingsPage';
 
 export default function DataExplorer() {
     const { accountId } = useAuth();
@@ -13,7 +14,7 @@ export default function DataExplorer() {
     const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<'properties' | 'alerts'>('properties');
+    const [activeTab, setActiveTab] = useState<'properties' | 'alerts' | 'settings'>('properties');
 
     // Fetch websites on mount
     useEffect(() => {
@@ -102,6 +103,15 @@ export default function DataExplorer() {
                     >
                         Alerts
                     </button>
+                    <button
+                        onClick={() => setActiveTab('settings')}
+                        className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'settings'
+                            ? 'border-blue-500 text-blue-400'
+                            : 'border-transparent text-slate-400 hover:text-slate-300'
+                            }`}
+                    >
+                        Settings
+                    </button>
                 </nav>
             </div>
 
@@ -167,8 +177,10 @@ export default function DataExplorer() {
                         </div>
                     )}
                 </>
-            ) : (
+            ) : activeTab === 'alerts' ? (
                 <AlertsPage />
+            ) : (
+                <SettingsPage />
             )}
         </div>
     );

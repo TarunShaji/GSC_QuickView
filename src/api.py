@@ -31,6 +31,10 @@ app = FastAPI(
 
 # CallbackRequest removed since we use GET redirect from Google now
 
+class RecipientRequest(BaseModel):
+    account_id: str
+    email: str
+
 # -------------------------------------------------------------------------
 # Helpers
 # -------------------------------------------------------------------------
@@ -174,41 +178,119 @@ def get_properties_by_website(website_id: str, account_id: str):
 
 @app.get("/properties/{property_id}/overview")
 def get_property_overview(property_id: str, account_id: str):
-    """Get property overview with 7v7 comparison"""
+    """Get property overview with 7v7 comparison including CTR and Position"""
     db = DatabasePersistence()
     db.connect()
     try:
         metrics = db.fetch_property_daily_metrics_for_overview(account_id, property_id)
         if not metrics:
             raise HTTPException(status_code=404, detail="No metrics found for this property")
-            
-        today = datetime.now().date()
-        last_7 = {"clicks": 0, "impressions": 0}
-        prev_7 = {"clicks": 0, "impressions": 0}
         
+        # Use most_recent_date instead of datetime.now() for GSC lag safety
+        most_recent_date = max(row['date'] for row in metrics)
+        
+        # Initialize aggregation windows
+        last_7 = {
+            "clicks": 0,
+            "impressions": 0,
+            "position_sum": 0.0,
+            "position_days": 0,
+            "days_with_data": 0
+        }
+        prev_7 = {
+            "clicks": 0,
+            "impressions": 0,
+            "position_sum": 0.0,
+            "position_days": 0,
+            "days_with_data": 0
+        }
+        
+        # Aggregate metrics into 7-day windows
         for row in metrics:
             row_date = row['date']
-            days_ago = (today - row_date).days
-            if 1 <= days_ago <= 7:
+            days_ago = (most_recent_date - row_date).days
+            
+            # Last 7 days: 0-6 days ago from most_recent_date
+            if 0 <= days_ago <= 6:
                 last_7["clicks"] += row['clicks'] or 0
                 last_7["impressions"] += row['impressions'] or 0
-            elif 8 <= days_ago <= 14:
+                if row.get('position'):
+                    last_7["position_sum"] += float(row['position'])
+                    last_7["position_days"] += 1
+                last_7["days_with_data"] += 1
+            # Previous 7 days: 7-13 days ago from most_recent_date
+            elif 7 <= days_ago <= 13:
                 prev_7["clicks"] += row['clicks'] or 0
                 prev_7["impressions"] += row['impressions'] or 0
-                
+                if row.get('position'):
+                    prev_7["position_sum"] += float(row['position'])
+                    prev_7["position_days"] += 1
+                prev_7["days_with_data"] += 1
+        
+        # Compute CTR (NOT averaged - total clicks / total impressions)
+        last_7_ctr = (last_7["clicks"] / last_7["impressions"]) if last_7["impressions"] > 0 else 0.0
+        prev_7_ctr = (prev_7["clicks"] / prev_7["impressions"]) if prev_7["impressions"] > 0 else 0.0
+        
+        # Compute Average Position
+        last_7_position = (last_7["position_sum"] / last_7["position_days"]) if last_7["position_days"] > 0 else 0.0
+        prev_7_position = (prev_7["position_sum"] / prev_7["position_days"]) if prev_7["position_days"] > 0 else 0.0
+        
+        # Compute deltas
         c_delta = last_7["clicks"] - prev_7["clicks"]
         i_delta = last_7["impressions"] - prev_7["impressions"]
+        ctr_delta = last_7_ctr - prev_7_ctr
+        position_delta = last_7_position - prev_7_position
+        
+        # Compute percentage deltas
+        clicks_pct = round((c_delta / prev_7["clicks"] * 100) if prev_7["clicks"] > 0 else 0, 2)
+        impressions_pct = round((i_delta / prev_7["impressions"] * 100) if prev_7["impressions"] > 0 else 0, 2)
+        ctr_pct = round((ctr_delta / prev_7_ctr * 100) if prev_7_ctr > 0 else 0, 2)
+        
+        # Structured logging
+        print(f"\n[OVERVIEW] Property ID: {property_id}")
+        print(f"[OVERVIEW] Most Recent Date: {most_recent_date}")
+        print(f"[OVERVIEW] Last 7 Days:")
+        print(f"  Clicks: {last_7['clicks']:,}")
+        print(f"  Impressions: {last_7['impressions']:,}")
+        print(f"  CTR: {last_7_ctr*100:.2f}%")
+        print(f"  Avg Position: {last_7_position:.1f}")
+        print(f"[OVERVIEW] Prev 7 Days:")
+        print(f"  Clicks: {prev_7['clicks']:,}")
+        print(f"  Impressions: {prev_7['impressions']:,}")
+        print(f"  CTR: {prev_7_ctr*100:.2f}%")
+        print(f"  Avg Position: {prev_7_position:.1f}")
+        print(f"[OVERVIEW] Deltas:")
+        print(f"  Clicks: {'+' if c_delta >= 0 else ''}{c_delta:,} ({'+' if clicks_pct >= 0 else ''}{clicks_pct}%)")
+        print(f"  Impressions: {'+' if i_delta >= 0 else ''}{i_delta:,} ({'+' if impressions_pct >= 0 else ''}{impressions_pct}%)")
+        print(f"  CTR: {'+' if ctr_delta >= 0 else ''}{ctr_delta*100:.2f}% ({'+' if ctr_pct >= 0 else ''}{ctr_pct}%)")
+        print(f"  Position: {'+' if position_delta >= 0 else ''}{position_delta:.1f} ({'worse' if position_delta > 0 else 'improvement' if position_delta < 0 else 'unchanged'})")
         
         return {
             "property_id": property_id,
-            "last_7_days": last_7,
-            "prev_7_days": prev_7,
+            "last_7_days": {
+                "clicks": last_7["clicks"],
+                "impressions": last_7["impressions"],
+                "ctr": round(last_7_ctr, 4),
+                "avg_position": round(last_7_position, 2),
+                "days_with_data": last_7["days_with_data"]
+            },
+            "prev_7_days": {
+                "clicks": prev_7["clicks"],
+                "impressions": prev_7["impressions"],
+                "ctr": round(prev_7_ctr, 4),
+                "avg_position": round(prev_7_position, 2),
+                "days_with_data": prev_7["days_with_data"]
+            },
             "deltas": {
                 "clicks": c_delta,
                 "impressions": i_delta,
-                "clicks_pct": round((c_delta / prev_7["clicks"] * 100) if prev_7["clicks"] > 0 else 0, 2),
-                "impressions_pct": round((i_delta / prev_7["impressions"] * 100) if prev_7["impressions"] > 0 else 0, 2)
-            }
+                "clicks_pct": clicks_pct,
+                "impressions_pct": impressions_pct,
+                "ctr": round(ctr_delta, 4),
+                "ctr_pct": ctr_pct,
+                "avg_position": round(position_delta, 2)
+            },
+            "computed_at": most_recent_date.isoformat()
         }
     finally:
         db.disconnect()
@@ -257,5 +339,41 @@ def get_alerts(account_id: str, limit: int = 20):
     try:
         alerts = db.fetch_recent_alerts(account_id, limit)
         return [serialize_row(a) for a in alerts]
+    finally:
+        db.disconnect()
+# -------------------------
+# Alert Recipients
+# -------------------------
+
+@app.get("/alert-recipients")
+def get_alert_recipients(account_id: str):
+    """Get all alert recipients for an account"""
+    db = DatabasePersistence()
+    db.connect()
+    try:
+        recipients = db.fetch_alert_recipients(account_id)
+        return {"account_id": account_id, "recipients": recipients}
+    finally:
+        db.disconnect()
+
+@app.post("/alert-recipients")
+def add_alert_recipient(request: RecipientRequest):
+    """Add a new alert recipient"""
+    db = DatabasePersistence()
+    db.connect()
+    try:
+        db.add_alert_recipient(request.account_id, request.email)
+        return {"status": "success"}
+    finally:
+        db.disconnect()
+
+@app.delete("/alert-recipients")
+def remove_alert_recipient(account_id: str, email: str):
+    """Remove an alert recipient"""
+    db = DatabasePersistence()
+    db.connect()
+    try:
+        db.remove_alert_recipient(account_id, email)
+        return {"status": "success"}
     finally:
         db.disconnect()

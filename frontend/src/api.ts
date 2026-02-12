@@ -9,7 +9,8 @@ import type {
     Property,
     PropertyOverview,
     PageVisibilityResponse,
-    DeviceVisibilityResponse
+    DeviceVisibilityResponse,
+    RecipientsResponse
 } from './types';
 
 const API_BASE = '/api';
@@ -68,6 +69,17 @@ export const api = {
     alerts: {
         getAll: (accountId: string, limit: number = 20) =>
             fetchJson<any[]>(`/alerts?account_id=${accountId}&limit=${limit}`),
+        getRecipients: (accountId: string) =>
+            fetchJson<RecipientsResponse>(`/alert-recipients?account_id=${accountId}`),
+        addRecipient: (accountId: string, email: string) =>
+            fetchJson<{ status: string }>(`/alert-recipients`, {
+                method: 'POST',
+                body: JSON.stringify({ account_id: accountId, email })
+            }),
+        removeRecipient: (accountId: string, email: string) =>
+            fetchJson<{ status: string }>(`/alert-recipients?account_id=${accountId}&email=${email}`, {
+                method: 'DELETE'
+            }),
     },
 };
 

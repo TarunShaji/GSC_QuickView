@@ -44,11 +44,15 @@ export interface PropertyOverview {
     last_7_days: {
         clicks: number;
         impressions: number;
+        ctr: number;
+        avg_position: number;
         days_with_data: number;
     };
     prev_7_days: {
         clicks: number;
         impressions: number;
+        ctr: number;
+        avg_position: number;
         days_with_data: number;
     };
     deltas: {
@@ -56,6 +60,9 @@ export interface PropertyOverview {
         impressions: number;
         clicks_pct: number;
         impressions_pct: number;
+        ctr: number;
+        ctr_pct: number;
+        avg_position: number;
     };
     computed_at: string;
 }
@@ -68,6 +75,19 @@ export interface PageVisibilityItem {
     delta: number;
     delta_pct: number;
     created_at: string;
+    // New metric columns
+    clicks_last_7: number;
+    clicks_prev_7: number;
+    ctr_last_7: number;
+    ctr_prev_7: number;
+    avg_position_last_7: number;
+    avg_position_prev_7: number;
+    // Health flags
+    title_optimization: boolean;
+    ranking_push: boolean;
+    zero_click: boolean;
+    low_ctr_pos_1_3: boolean;
+    strong_gainer: boolean;
 }
 
 export interface PageVisibilityResponse {
@@ -99,4 +119,9 @@ export interface DeviceVisibility {
 export interface DeviceVisibilityResponse {
     property_id: string;
     devices: Record<string, DeviceVisibility>;
+}
+
+export interface RecipientsResponse {
+    account_id: string;
+    recipients: string[];
 }

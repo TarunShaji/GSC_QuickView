@@ -4,7 +4,8 @@ Multi-Account Aware
 """
 
 from gsc_client import GSCClient, AuthError
-from property_grouper import PropertyGrouper
+
+from utils.urls import extract_base_domain
 from db_persistence import DatabasePersistence
 from property_metrics_daily_ingestor import PropertyMetricsDailyIngestor
 from page_metrics_daily_ingestor import PageMetricsDailyIngestor
@@ -74,8 +75,13 @@ def run_pipeline(account_id: str):
         all_properties = client.fetch_properties()
         filtered_properties = client.filter_properties(all_properties)
         
-        grouper = PropertyGrouper()
-        grouped_properties = grouper.group_properties(filtered_properties)
+        # Group properties by base domain (inline logic replacing legacy PropertyGrouper)
+        grouped_properties = {}
+        for prop in filtered_properties:
+            base_domain = extract_base_domain(prop.get('siteUrl', ''))
+            if base_domain not in grouped_properties:
+                grouped_properties[base_domain] = []
+            grouped_properties[base_domain].append(prop)
         
         log_step(account_id, "Persisting websites and properties...", "PROGRESS")
         db.persist_grouped_properties(account_id, grouped_properties)

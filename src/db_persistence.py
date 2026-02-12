@@ -779,7 +779,7 @@ class DatabasePersistence:
         Returns:
             Total number of rows inserted
         
-        Schema:
+        Schema (18 data columns):
             - property_id (uuid)
             - category (text): 'new' | 'lost' | 'drop' | 'gain'
             - page_url (text)
@@ -787,6 +787,17 @@ class DatabasePersistence:
             - impressions_prev_7 (int4)
             - delta (int4)
             - delta_pct (numeric)
+            - clicks_last_7 (int4)
+            - clicks_prev_7 (int4)
+            - ctr_last_7 (numeric)
+            - ctr_prev_7 (numeric)
+            - avg_position_last_7 (numeric)
+            - avg_position_prev_7 (numeric)
+            - title_optimization (bool)
+            - ranking_push (bool)
+            - zero_click (bool)
+            - low_ctr_pos_1_3 (bool)
+            - strong_gainer (bool)
             - created_at (timestamptz)
         """
         if not self.connection or not self.cursor:
@@ -820,7 +831,20 @@ class DatabasePersistence:
                         page.get('impressions_last_7', 0),
                         page.get('impressions_prev_7', 0),
                         page.get('delta', 0),
-                        page.get('delta_pct', 0.0)
+                        page.get('delta_pct', 0.0),
+                        # New metric columns
+                        page.get('clicks_last_7', 0),
+                        page.get('clicks_prev_7', 0),
+                        page.get('ctr_last_7', 0.0),
+                        page.get('ctr_prev_7', 0.0),
+                        page.get('position_last_7', 0.0),
+                        page.get('position_prev_7', 0.0),
+                        # Health flags
+                        page.get('title_optimization', False),
+                        page.get('ranking_push', False),
+                        page.get('zero_click', False),
+                        page.get('low_ctr_pos_1_3', False),
+                        page.get('strong_gainer', False)
                     ))
             
             # Batch insert
@@ -830,8 +854,12 @@ class DatabasePersistence:
                     """
                     INSERT INTO page_visibility_analysis 
                         (property_id, category, page_url, impressions_last_7, 
-                         impressions_prev_7, delta, delta_pct, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                         impressions_prev_7, delta, delta_pct,
+                         clicks_last_7, clicks_prev_7, ctr_last_7, ctr_prev_7,
+                         avg_position_last_7, avg_position_prev_7,
+                         title_optimization, ranking_push, zero_click,
+                         low_ctr_pos_1_3, strong_gainer, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     """,
                     rows_to_insert,
                     page_size=100
@@ -846,6 +874,7 @@ class DatabasePersistence:
             self.connection.rollback()
             print(f"[ERROR] Failed to persist page visibility analysis: {e}")
             raise RuntimeError(f"Database error persisting page visibility: {e}") from e
+
 
 
     def persist_device_visibility_analysis(
@@ -1043,7 +1072,11 @@ class DatabasePersistence:
         
         Returns:
             List of dicts with: category, page_url, impressions_last_7, 
-                               impressions_prev_7, delta, delta_pct
+                               impressions_prev_7, delta, delta_pct,
+                               clicks_last_7, clicks_prev_7, ctr_last_7, ctr_prev_7,
+                               avg_position_last_7, avg_position_prev_7,
+                               title_optimization, ranking_push, zero_click,
+                               low_ctr_pos_1_3, strong_gainer
         """
         if not self.connection or not self.cursor:
             raise RuntimeError("Database connection not established")
@@ -1052,7 +1085,12 @@ class DatabasePersistence:
             self.cursor.execute("""
                 SELECT 
                     v.category, v.page_url, v.impressions_last_7, 
-                    v.impressions_prev_7, v.delta, v.delta_pct
+                    v.impressions_prev_7, v.delta, v.delta_pct,
+                    v.clicks_last_7, v.clicks_prev_7, 
+                    v.ctr_last_7, v.ctr_prev_7,
+                    v.avg_position_last_7, v.avg_position_prev_7,
+                    v.title_optimization, v.ranking_push, v.zero_click,
+                    v.low_ctr_pos_1_3, v.strong_gainer
                 FROM page_visibility_analysis v
                 JOIN properties p ON v.property_id = p.id
                 WHERE v.property_id = %s AND p.account_id = %s
@@ -1065,6 +1103,7 @@ class DatabasePersistence:
         except psycopg2.Error as e:
             print(f"[ERROR] Failed to fetch page visibility analysis: {e}")
             raise RuntimeError(f"Database error fetching page visibility analysis: {e}") from e
+
 
 
     def fetch_device_visibility_analysis(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
@@ -1156,6 +1195,37 @@ class DatabasePersistence:
         except psycopg2.Error as e:
             print(f"[ERROR] Failed to fetch recipients for account {account_id}: {e}")
             raise RuntimeError(f"Database error fetching alert recipients: {e}") from e
+
+    def add_alert_recipient(self, account_id: str, email: str) -> None:
+        """Add a new alert recipient for an account."""
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                INSERT INTO alert_recipients (account_id, email)
+                VALUES (%s, %s)
+                ON CONFLICT (account_id, email) DO NOTHING
+            """, (account_id, email))
+            self.connection.commit()
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to add recipient {email} for account {account_id}: {e}")
+            raise RuntimeError(f"Database error adding alert recipient: {e}") from e
+
+    def remove_alert_recipient(self, account_id: str, email: str) -> None:
+        """Remove an alert recipient for an account."""
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+        
+        try:
+            self.cursor.execute("""
+                DELETE FROM alert_recipients
+                WHERE account_id = %s AND email = %s
+            """, (account_id, email))
+            self.connection.commit()
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to remove recipient {email} for account {account_id}: {e}")
+            raise RuntimeError(f"Database error removing alert recipient: {e}") from e
 
 
     def mark_alert_email_sent(self, alert_id: str) -> None:

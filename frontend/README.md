@@ -1,67 +1,43 @@
 # GSC Quick View - Frontend
 
-Modern React frontend for Google Search Console analytics.
+This is the React-based frontend for the Google Search Console (GSC) Quick View tool. It provides a premium, responsive dashboard for viewing SEO analytics across multiple accounts.
 
-## Tech Stack
+## 🛠️ Tech Stack
 
-- **React 18** + TypeScript
-- **Vite** for fast development
-- **Tailwind CSS** for styling
+- **Framework**: React 18 (Vite)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **State Management**: React Context (AuthContext)
+- **Icons**: Heroicons / Lucide (SVG-based)
 
-## Quick Start
+## 🚀 Getting Started
 
+### 1. Install Dependencies
+Navigate to the frontend directory and install the required npm packages:
 ```bash
-# Install dependencies
+cd frontend
 npm install
+```
 
-# Start dev server (localhost:5173)
+### 2. Configure Proxy
+The frontend uses a proxy configured in `vite.config.ts` to route `/api/*` requests to the local backend server (usually `http://localhost:8000`). Ensure the backend is running before using the dashboard.
+
+### 3. Run Development Server
+```bash
 npm run dev
 ```
+The app will be available at `http://localhost:5173`.
 
-## Project Structure
+## 📂 Project Structure
 
-```
-src/
-├── components/
-│   ├── AuthGate.tsx         # Google OAuth authentication
-│   ├── PipelineGate.tsx     # Pipeline execution & progress
-│   ├── DataExplorer.tsx     # Website/property selectors
-│   └── PropertyDashboard.tsx # Analytics panels
-├── api.ts                   # API client
-├── types.ts                 # TypeScript types
-├── App.tsx                  # Root component
-└── index.css                # Tailwind imports
-```
+- `src/components/`: Modular React components (Dashboard, Alerts, Settings).
+- `src/AuthContext.tsx`: Manages the account-level session (account_id, email).
+- `src/api.ts`: Centralized API client using `fetch`.
+- `src/types.ts`: TypeScript interfaces for backend responses.
 
-## Component Flow
+## 🔑 Key Features
 
-```
-AuthGate
-  └─ PipelineGate
-       └─ DataExplorer
-            └─ PropertyDashboard
-```
-
-## API Endpoints Used
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/auth/status` | Check authentication |
-| POST | `/auth/login` | Trigger Google OAuth |
-| GET | `/pipeline/status` | Poll pipeline progress |
-| POST | `/pipeline/run` | Start pipeline |
-| GET | `/websites` | List all websites |
-| GET | `/websites/{id}/properties` | Properties for website |
-| GET | `/properties/{id}/overview` | 7v7 comparison |
-| GET | `/properties/{id}/pages` | Page visibility |
-| GET | `/properties/{id}/devices` | Device visibility |
-
-## Development
-
-The dev server proxies `/api/*` to `http://localhost:8000` (backend).
-
-Make sure the backend is running:
-```bash
-cd ../src
-uvicorn api:app --reload
-```
+- **Multi-Account Dashboard**: Switch between different GSC accounts seamlessly.
+- **Visual Analytics**: Interactive cards and tables showing impression deltas.
+- **Alert Management**: A dedicated settings page to manage email recipients for SEO alerts.
+- **Responsive Design**: Clean, dark-mode focused UI built with Tailwind CSS.

@@ -146,6 +146,57 @@ class PageVisibilityAnalyzer:
             'avg_position': avg_position
         }
     
+    def compute_health_flags(self, page: Dict[str, Any]) -> Dict[str, bool]:
+        """
+        Compute SEO health boolean flags for a single page.
+        
+        These are additive intelligence flags — they do NOT replace
+        the existing drop/gain/new/lost category system.
+        
+        Minimum volume gate: impressions_last_7 >= 100
+        
+        Args:
+            page: Dict with impressions_last_7, clicks_last_7,
+                  ctr_last_7, position_last_7, delta_pct
+        
+        Returns:
+            Dict with 5 boolean flags
+        """
+        flags = {
+            'title_optimization': False,
+            'ranking_push': False,
+            'zero_click': False,
+            'low_ctr_pos_1_3': False,
+            'strong_gainer': False,
+        }
+        
+        imp = page.get('impressions_last_7', 0)
+        if imp < 100:
+            return flags  # Below minimum volume gate
+        
+        # Convert CTR to percentage (stored as 0.0-1.0 ratio)
+        ctr_pct = page.get('ctr_last_7', 0.0) * 100
+        pos = page.get('position_last_7', 0.0)
+        clicks = page.get('clicks_last_7', 0)
+        delta_pct = page.get('delta_pct', 0.0)
+        
+        # Title / Meta Optimization: High impressions, good ranking, low CTR
+        flags['title_optimization'] = (imp >= 500 and pos <= 10 and ctr_pct < 2.0)
+        
+        # Ranking Push: Near page 1 opportunity
+        flags['ranking_push'] = (imp >= 200 and 8 <= pos <= 20)
+        
+        # Zero Click Diagnostic
+        flags['zero_click'] = (imp >= 300 and clicks == 0)
+        
+        # Low CTR in Top 3 positions
+        flags['low_ctr_pos_1_3'] = (imp >= 300 and 1 <= pos <= 3 and ctr_pct < 4.0)
+        
+        # Strong Gainer
+        flags['strong_gainer'] = (imp >= 200 and delta_pct >= 40 and pos <= 20)
+        
+        return flags
+    
     def compute_page_deltas(self, rows: List[Dict[str, Any]], continuing_pages: Set[str],
                            most_recent_date: datetime.date) -> List[Dict[str, Any]]:
         """
@@ -157,7 +208,7 @@ class PageVisibilityAnalyzer:
             most_recent_date: Most recent date in dataset
         
         Returns:
-            List of page delta dicts with classification
+            List of page delta dicts with classification and health flags
         """
         # Calculate date boundaries
         last_7_start = most_recent_date - timedelta(days=6)
@@ -180,13 +231,13 @@ class PageVisibilityAnalyzer:
             # Apply low-volume threshold for classification
             total_impressions = last_7['impressions'] + prev_7['impressions']
             
-            # Classify (only if above threshold)
+            # Classify (only if above threshold) — 40% matches device analyzer
             if total_impressions >= self.low_volume_threshold:
-                classification = classify_delta(impressions_pct, threshold=50.0)
+                classification = classify_delta(impressions_pct, threshold=40.0)
             else:
                 classification = 'flat'
             
-            page_deltas.append({
+            page_dict = {
                 'page_url': page_url,
                 'impressions_last_7': last_7['impressions'],
                 'impressions_prev_7': prev_7['impressions'],
@@ -199,7 +250,13 @@ class PageVisibilityAnalyzer:
                 'ctr_prev_7': prev_7['ctr'],
                 'position_last_7': last_7['avg_position'],
                 'position_prev_7': prev_7['avg_position']
-            })
+            }
+            
+            # Compute and merge health flags
+            health_flags = self.compute_health_flags(page_dict)
+            page_dict.update(health_flags)
+            
+            page_deltas.append(page_dict)
         
         return page_deltas
     
@@ -272,8 +329,8 @@ class PageVisibilityAnalyzer:
         significant_drops = sum(1 for p in page_deltas if p['classification'] == 'significant_drop')
         significant_gains = sum(1 for p in page_deltas if p['classification'] == 'significant_gain')
         
-        print(f"    Significant drops (>50%): {significant_drops}")
-        print(f"    Significant gains (>50%): {significant_gains}")
+        print(f"    Significant drops (>40%): {significant_drops}")
+        print(f"    Significant gains (>40%): {significant_gains}")
         
         # Build detailed lists
         last_7_start = most_recent_date - timedelta(days=6)
@@ -283,17 +340,44 @@ class PageVisibilityAnalyzer:
         new_pages_details = []
         for page_url in new_pages:
             metrics = self.aggregate_page_metrics(rows, page_url, last_7_start, most_recent_date)
-            new_pages_details.append({
+            page_dict = {
                 'page_url': page_url,
-                'impressions_last_7': metrics['impressions']
-            })
+                'impressions_last_7': metrics['impressions'],
+                'impressions_prev_7': 0,
+                'delta': metrics['impressions'],
+                'delta_pct': 0.0,
+                'clicks_last_7': metrics['clicks'],
+                'clicks_prev_7': 0,
+                'ctr_last_7': metrics['ctr'],
+                'ctr_prev_7': 0.0,
+                'position_last_7': metrics['avg_position'],
+                'position_prev_7': 0.0
+            }
+            # Compute health flags for new pages too
+            health_flags = self.compute_health_flags(page_dict)
+            page_dict.update(health_flags)
+            new_pages_details.append(page_dict)
         
         lost_pages_details = []
         for page_url in lost_pages:
             metrics = self.aggregate_page_metrics(rows, page_url, prev_7_start, prev_7_end)
             lost_pages_details.append({
                 'page_url': page_url,
-                'impressions_prev_7': metrics['impressions']
+                'impressions_last_7': 0,
+                'impressions_prev_7': metrics['impressions'],
+                'delta': -metrics['impressions'],
+                'delta_pct': -100.0,
+                'clicks_last_7': 0,
+                'clicks_prev_7': metrics['clicks'],
+                'ctr_last_7': 0.0,
+                'ctr_prev_7': metrics['ctr'],
+                'position_last_7': 0.0,
+                'position_prev_7': metrics['avg_position'],
+                'title_optimization': False,
+                'ranking_push': False,
+                'zero_click': False,
+                'low_ctr_pos_1_3': False,
+                'strong_gainer': False
             })
         
         # Sort by impressions (descending)
