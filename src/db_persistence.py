@@ -98,10 +98,54 @@ class DatabasePersistence:
             account_id = result['id']
             print(f"[DB] Account upserted: {email} (id: {account_id})")
             return account_id
-        except psycopg2.Error as e:
+        
+        except Exception as e:
             self.connection.rollback()
-            print(f"[ERROR] Failed to upsert account {email}: {e}")
-            raise RuntimeError(f"Database error upserting account: {e}") from e
+            print(f"[DB ERROR] Failed to upsert account: {e}")
+            raise
+
+    def mark_account_data_initialized(self, account_id: str) -> None:
+        """
+        Mark account as having completed initial data sync.
+        Called after successful pipeline run.
+        
+        Args:
+            account_id: UUID of the account
+        """
+        try:
+            self.cursor.execute("""
+                UPDATE accounts
+                SET data_initialized = TRUE, updated_at = NOW()
+                WHERE id = %s
+            """, (account_id,))
+            self.connection.commit()
+            print(f"[DB] Account {account_id} marked as data_initialized=TRUE")
+        except Exception as e:
+            self.connection.rollback()
+            print(f"[DB ERROR] Failed to mark account as initialized: {e}")
+            raise
+
+    def is_account_data_initialized(self, account_id: str) -> bool:
+        """
+        Check if account has completed initial data sync.
+        
+        Args:
+            account_id: UUID of the account
+            
+        Returns:
+            True if data has been initialized, False otherwise
+        """
+        try:
+            self.cursor.execute("""
+                SELECT data_initialized
+                FROM accounts
+                WHERE id = %s
+            """, (account_id,))
+            result = self.cursor.fetchone()
+            return result['data_initialized'] if result else False
+        except Exception as e:
+            print(f"[DB ERROR] Failed to check initialization status: {e}")
+            return False
 
     def fetch_all_accounts(self) -> List[Dict[str, Any]]:
         """Fetch all accounts for the cron dispatcher."""

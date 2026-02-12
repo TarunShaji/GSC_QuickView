@@ -47,10 +47,11 @@ class GoogleAuthHandler:
         )
         
         # access_type='offline' ensures we get a refresh_token
-        # prompt='consent' ensures we get a refresh_token even on re-login
+        # prompt='consent' forces full consent screen every time
+        # include_granted_scopes='false' prevents scope merging issues
         authorization_url, state = flow.authorization_url(
             access_type='offline',
-            include_granted_scopes='true',
+            include_granted_scopes='false',
             prompt='consent'
         )
         
@@ -77,6 +78,14 @@ class GoogleAuthHandler:
             # Exchange code for tokens
             flow.fetch_token(code=code)
             credentials = flow.credentials
+            
+            # Validate that required scope was granted
+            REQUIRED_SCOPE = 'https://www.googleapis.com/auth/webmasters.readonly'
+            if not credentials.scopes or REQUIRED_SCOPE not in credentials.scopes:
+                raise RuntimeError(
+                    "Search Console permission (webmasters.readonly) was not granted. "
+                    "Please approve all requested permissions during login."
+                )
             
             # Extract email from ID token
             token_info = id_token.verify_oauth2_token(

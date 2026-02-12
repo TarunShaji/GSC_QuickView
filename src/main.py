@@ -247,6 +247,10 @@ def run_pipeline(account_id: str):
             is_running=False,
             completed_at=datetime.now()
         )
+        
+        # Mark account as data initialized after successful completion
+        db.mark_account_data_initialized(account_id)
+        
         log_step(account_id, "PIPELINE COMPLETED SUCCESSFULLY", "SUCCESS")
         
     except Exception as e:

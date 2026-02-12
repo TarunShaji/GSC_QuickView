@@ -295,6 +295,163 @@ def get_property_overview(property_id: str, account_id: str):
     finally:
         db.disconnect()
 
+def classify_property_health(
+    impressions_last_7: int,
+    impressions_prev_7: int,
+    clicks_last_7: int,
+    clicks_prev_7: int
+) -> str:
+    """
+    Simple, robust property health classification.
+    Returns: 'critical', 'warning', 'healthy', 'insufficient_data'
+    """
+    MIN_TOTAL_IMPRESSIONS = 500
+    total_impressions = impressions_last_7 + impressions_prev_7
+    
+    if total_impressions < MIN_TOTAL_IMPRESSIONS:
+        return "insufficient_data"
+    
+    if impressions_prev_7 == 0:
+        return "insufficient_data"
+    
+    impressions_delta_pct = (
+        (impressions_last_7 - impressions_prev_7) / impressions_prev_7
+    ) * 100
+    
+    clicks_delta_pct = 0
+    if clicks_prev_7 > 0:
+        clicks_delta_pct = (
+            (clicks_last_7 - clicks_prev_7) / clicks_prev_7
+        ) * 100
+    
+    # Catastrophic single-metric drop
+    if impressions_delta_pct <= -50 or clicks_delta_pct <= -50:
+        return "critical"
+    
+    # Both metrics significantly down
+    if impressions_delta_pct <= -25 and clicks_delta_pct <= -25:
+        return "critical"
+    
+    # Either metric moderately down
+    if impressions_delta_pct <= -12 or clicks_delta_pct <= -12:
+        return "warning"
+    
+    # CTR issue: impressions up, clicks down
+    if impressions_delta_pct >= 15 and clicks_delta_pct <= -15:
+        return "warning"
+    
+    return "healthy"
+
+@app.get("/dashboard-summary")
+def get_dashboard_summary(account_id: str):
+    """
+    Get dashboard summary with website-grouped property health status.
+    Computes 7v7 health metrics for all properties.
+    """
+    db = DatabasePersistence()
+    db.connect()
+    try:
+        # Check if account data has been initialized
+        if not db.is_account_data_initialized(account_id):
+            return {
+                "status": "not_initialized",
+                "message": "Data has not been initialized. Please run the pipeline to sync your properties.",
+                "websites": []
+            }
+        
+        # Fetch all websites for this account
+        websites = db.fetch_all_websites(account_id)
+        
+        result = {"websites": []}
+        
+        for website in websites:
+            website_data = {
+                "website_id": website['id'],
+                "website_domain": website['base_domain'],
+                "properties": []
+            }
+            
+            # Fetch all properties for this website
+            properties = db.fetch_properties_by_website(account_id, website['id'])
+            
+            for prop in properties:
+                property_id = prop['id']
+                
+                # Fetch metrics for this property
+                metrics = db.fetch_property_daily_metrics_for_overview(account_id, property_id)
+                
+                if not metrics:
+                    # Skip properties with no data
+                    continue
+                
+                # Find most recent date
+                most_recent_date = max(row['date'] for row in metrics)
+                
+                # Initialize 7v7 windows (days 1-7 vs days 8-14)
+                last_7 = {"clicks": 0, "impressions": 0}
+                prev_7 = {"clicks": 0, "impressions": 0}
+                
+                for row in metrics:
+                    row_date = row['date']
+                    days_ago = (most_recent_date - row_date).days
+                    
+                    # Last 7 days: 0-6 days ago
+                    if 0 <= days_ago <= 6:
+                        last_7["clicks"] += row['clicks'] or 0
+                        last_7["impressions"] += row['impressions'] or 0
+                    # Previous 7 days: 7-13 days ago
+                    elif 7 <= days_ago <= 13:
+                        prev_7["clicks"] += row['clicks'] or 0
+                        prev_7["impressions"] += row['impressions'] or 0
+                
+                # Compute delta percentages
+                impressions_delta_pct = round(
+                    ((last_7["impressions"] - prev_7["impressions"]) / prev_7["impressions"] * 100)
+                    if prev_7["impressions"] > 0 else 0,
+                    1
+                )
+                clicks_delta_pct = round(
+                    ((last_7["clicks"] - prev_7["clicks"]) / prev_7["clicks"] * 100)
+                    if prev_7["clicks"] > 0 else 0,
+                    1
+                )
+                
+                # Use robust health classification
+                status = classify_property_health(
+                    last_7["impressions"],
+                    prev_7["impressions"],
+                    last_7["clicks"],
+                    prev_7["clicks"]
+                )
+                
+                # Add property summary with structured metrics
+                website_data["properties"].append({
+                    "property_id": property_id,
+                    "property_name": prop['site_url'],
+                    "status": status,
+                    "data_through": most_recent_date.isoformat(),
+                    "last_7": {
+                        "impressions": last_7["impressions"],
+                        "clicks": last_7["clicks"]
+                    },
+                    "prev_7": {
+                        "impressions": prev_7["impressions"],
+                        "clicks": prev_7["clicks"]
+                    },
+                    "delta_pct": {
+                        "impressions": impressions_delta_pct,
+                        "clicks": clicks_delta_pct
+                    }
+                })
+            
+            # Only include websites that have properties with data
+            if website_data["properties"]:
+                result["websites"].append(website_data)
+        
+        return result
+    finally:
+        db.disconnect()
+
 @app.get("/properties/{property_id}/pages")
 def get_page_visibility(property_id: str, account_id: str):
     """Get page visibility analysis for a property"""
