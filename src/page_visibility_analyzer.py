@@ -23,6 +23,23 @@ from db_persistence import DatabasePersistence
 from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 
 
+def safe_delta_pct(current: int, previous: int) -> float:
+    """
+    Compute mathematically safe percentage delta.
+    
+    Rules:
+    - If previous > 0: standard delta calc
+    - If previous == 0 and current > 0: +100.0% (growth from zero)
+    - If previous == 0 and current == 0: 0.0%
+    """
+    if previous > 0:
+        return round(((current - previous) / previous) * 100, 1)
+    elif current > 0:
+        return 100.0
+    else:
+        return 0.0
+
+
 class PageVisibilityAnalyzer:
     """Analyzes page-level visibility using impressions-only set logic"""
     
@@ -164,11 +181,11 @@ class PageVisibilityAnalyzer:
             
             # Compute impression delta
             delta = imps_last - imps_prev
-            delta_pct = (delta / imps_prev * 100) if imps_prev > 0 else 0.0
+            delta_pct = safe_delta_pct(imps_last, imps_prev)
             
             # Compute clicks delta
             clicks_delta = clicks_last - clicks_prev
-            clicks_delta_pct = (clicks_delta / clicks_prev * 100) if clicks_prev > 0 else 0.0
+            clicks_delta_pct = safe_delta_pct(clicks_last, clicks_prev)
             
             # Classify: only persist significant changes
             page_dict = {
@@ -263,11 +280,11 @@ class PageVisibilityAnalyzer:
                 'impressions_last_7': metrics['impressions'],
                 'impressions_prev_7': 0,
                 'delta': metrics['impressions'],
-                'delta_pct': 100.0,
+                'delta_pct': safe_delta_pct(metrics['impressions'], 0),
                 'clicks_last_7': metrics['clicks'],
                 'clicks_prev_7': 0,
                 'clicks_delta': metrics['clicks'],
-                'clicks_delta_pct': 100.0
+                'clicks_delta_pct': safe_delta_pct(metrics['clicks'], 0)
             })
         
         lost_pages = []
@@ -278,11 +295,11 @@ class PageVisibilityAnalyzer:
                 'impressions_last_7': 0,
                 'impressions_prev_7': metrics['impressions'],
                 'delta': -metrics['impressions'],
-                'delta_pct': -100.0,
+                'delta_pct': safe_delta_pct(0, metrics['impressions']),
                 'clicks_last_7': 0,
                 'clicks_prev_7': metrics['clicks'],
                 'clicks_delta': -metrics['clicks'],
-                'clicks_delta_pct': -100.0
+                'clicks_delta_pct': safe_delta_pct(0, metrics['clicks'])
             })
         
         # Sort by impressions (descending)

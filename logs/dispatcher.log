@@ -5778,3 +5778,66 @@
 [20:30:04] [DISPATCHER] ============================================================
 [DB] Connection pool closed
 [20:30:04] [DISPATCHER] Database connection and pool closed
+[20:35:00] [DISPATCHER] ============================================================
+[20:35:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:35:00] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:35:01] [DISPATCHER] Database connection established
+[20:35:01] [DISPATCHER] Starting multi-account alert dispatcher
+[20:35:04] [DISPATCHER] ✅ SMTP connection authenticated
+[20:35:04] [DISPATCHER] [ACCOUNT: seo6@cubehq.ai] No recipients configured
+[20:35:04] [DISPATCHER] SMTP connection closed
+[20:35:04] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:35:04] [DISPATCHER] ============================================================
+[20:35:04] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:35:04] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:35:04] [DISPATCHER] Database connection and pool closed
+[20:40:00] [DISPATCHER] ============================================================
+[20:40:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:40:00] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:40:01] [DISPATCHER] Database connection established
+[20:40:01] [DISPATCHER] Starting multi-account alert dispatcher
+[20:40:03] [DISPATCHER] ✅ SMTP connection authenticated
+[20:40:03] [DISPATCHER] SMTP connection closed
+[20:40:03] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:40:03] [DISPATCHER] ============================================================
+[20:40:03] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:40:03] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:40:03] [DISPATCHER] Database connection and pool closed
+[20:45:00] [DISPATCHER] ============================================================
+[20:45:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:45:00] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:45:01] [DISPATCHER] Database connection established
+[20:45:01] [DISPATCHER] Starting multi-account alert dispatcher
+[20:45:02] [DISPATCHER] ✅ SMTP connection authenticated
+[20:45:03] [DISPATCHER] [ACCOUNT: seo6@cubehq.ai] No recipients configured
+[20:45:03] [DISPATCHER] SMTP connection closed
+[20:45:03] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:45:03] [DISPATCHER] ============================================================
+[20:45:03] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:45:03] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:45:03] [DISPATCHER] Database connection and pool closed
+[20:50:00] [DISPATCHER] ============================================================
+[20:50:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:50:00] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:50:01] [DISPATCHER] Database connection established
+[20:50:01] [DISPATCHER] Starting multi-account alert dispatcher
+[20:50:03] [DISPATCHER] ✅ SMTP connection authenticated
+[20:50:04] [DISPATCHER] [ACCOUNT: seo6@cubehq.ai] No recipients configured
+[20:50:04] [DISPATCHER] SMTP connection closed
+[20:50:04] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:50:04] [DISPATCHER] ============================================================
+[20:50:04] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:50:04] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:50:04] [DISPATCHER] Database connection and pool closed
