@@ -11,8 +11,8 @@ export default function PropertyDashboard() {
     const [overview, setOverview] = useState<PropertyOverview | null>(null);
     const [pages, setPages] = useState<PageVisibilityResponse | null>(null);
     const [devices, setDevices] = useState<DeviceVisibilityResponse | null>(null);
+    const [activeTab, setActiveTab] = useState<'drop' | 'gain' | 'new' | 'lost'>('drop');
     const [isLoading, setIsLoading] = useState(true);
-    // V1: Removed activeInsightFilter state
 
     useEffect(() => {
         if (!propertyId || !accountId) return;
@@ -101,66 +101,99 @@ export default function PropertyDashboard() {
             </div>
             {/* Property Overview */}
             {overview && (
-                <div className="bg-slate-800 rounded-xl p-6">
-                    <h2 className="text-lg font-semibold text-white mb-4">7-Day Overview</h2>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                        <div className="bg-slate-700/50 rounded-lg p-4">
-                            <p className="text-sm text-slate-400">Clicks (Last 7)</p>
-                            <p className="text-2xl font-bold text-white">{overview.last_7_days.clicks.toLocaleString()}</p>
-                            <p className="text-sm">{formatDelta(overview.deltas.clicks_pct)}</p>
+                <div className="bg-slate-800/40 rounded-xl p-6 border border-slate-800/60 backdrop-blur-sm">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center border border-slate-700/30 rounded-lg p-6 bg-slate-900/40">
+                        {/* Impressions */}
+                        <div className="text-center md:text-left">
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Impressions</p>
+                            <p className="text-3xl font-bold text-white mb-1">
+                                {overview.last_7_days.impressions.toLocaleString()}
+                            </p>
+                            <div className="flex flex-col text-sm">
+                                {formatDelta(overview.deltas.impressions_pct)}
+                                <span className="text-slate-500 font-mono text-[10px] mt-0.5">
+                                    {overview.prev_7_days.impressions.toLocaleString()} → {overview.last_7_days.impressions.toLocaleString()}
+                                </span>
+                            </div>
                         </div>
-                        <div className="bg-slate-700/50 rounded-lg p-4">
-                            <p className="text-sm text-slate-400">Impressions (Last 7)</p>
-                            <p className="text-2xl font-bold text-white">{overview.last_7_days.impressions.toLocaleString()}</p>
-                            <p className="text-sm">{formatDelta(overview.deltas.impressions_pct)}</p>
+
+                        {/* Clicks */}
+                        <div className="text-center md:text-left border-t md:border-t-0 md:border-l border-slate-700/30 pt-6 md:pt-0 md:pl-8">
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Clicks</p>
+                            <p className="text-3xl font-bold text-white mb-1">
+                                {overview.last_7_days.clicks.toLocaleString()}
+                            </p>
+                            <div className="flex flex-col text-sm">
+                                {formatDelta(overview.deltas.clicks_pct)}
+                                <span className="text-slate-500 font-mono text-[10px] mt-0.5">
+                                    {overview.prev_7_days.clicks.toLocaleString()} → {overview.last_7_days.clicks.toLocaleString()}
+                                </span>
+                            </div>
                         </div>
-                        <div className="bg-slate-700/50 rounded-lg p-4">
-                            <p className="text-sm text-slate-400">CTR (Last 7)</p>
-                            <p className="text-2xl font-bold text-white">{(overview.last_7_days.ctr * 100).toFixed(2)}%</p>
-                            <p className="text-sm">{formatDelta(overview.deltas.ctr_pct)}</p>
+
+                        {/* CTR */}
+                        <div className="text-center md:text-left border-t md:border-t-0 md:border-l border-slate-700/30 pt-6 md:pt-0 md:pl-8">
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">CTR</p>
+                            <p className="text-3xl font-bold text-white mb-1">
+                                {(overview.last_7_days.ctr * 100).toFixed(2)}%
+                            </p>
+                            <div className="flex flex-col text-sm">
+                                {formatDelta(overview.deltas.ctr_pct)}
+                                <span className="text-slate-500 font-mono text-[10px] mt-0.5">
+                                    {((overview.prev_7_days.ctr * 100).toFixed(2))}% → {((overview.last_7_days.ctr * 100).toFixed(2))}%
+                                </span>
+                            </div>
                         </div>
-                        <div className="bg-slate-700/50 rounded-lg p-4">
-                            <p className="text-sm text-slate-400">Avg Position (Last 7)</p>
-                            <p className="text-2xl font-bold text-white">{overview.last_7_days.avg_position.toFixed(1)}</p>
-                            <p className="text-sm">{formatPositionDelta(overview.deltas.avg_position)}</p>
+                    </div>
+
+                    <div className="mt-6 pt-5 border-t border-slate-700/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Average Rank Position</p>
+                            <div className="flex items-baseline gap-3">
+                                <span className="text-2xl font-bold text-sky-400">
+                                    {overview.last_7_days.avg_position.toFixed(1)}
+                                </span>
+                                <span className="text-sm">
+                                    {formatPositionDelta(overview.deltas.avg_position)}
+                                    <span className="text-slate-500 ml-1 text-xs">
+                                        {overview.deltas.avg_position < 0 ? 'improvement' : overview.deltas.avg_position > 0 ? 'decline' : ''}
+                                    </span>
+                                </span>
+                            </div>
                         </div>
-                        <div className="bg-slate-700/50 rounded-lg p-4">
-                            <p className="text-sm text-slate-400">Clicks (Prev 7)</p>
-                            <p className="text-2xl font-bold text-slate-300">{overview.prev_7_days.clicks.toLocaleString()}</p>
-                        </div>
-                        <div className="bg-slate-700/50 rounded-lg p-4">
-                            <p className="text-sm text-slate-400">Impressions (Prev 7)</p>
-                            <p className="text-2xl font-bold text-slate-300">{overview.prev_7_days.impressions.toLocaleString()}</p>
+                        <div className="text-[10px] text-slate-500 md:text-right italic">
+                            Lower is better. Position 1 = top of search results.
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Device Visibility */}
+            {/* Device Performance */}
             {devices && (
-                <div className="bg-slate-800 rounded-xl p-6">
-                    <h2 className="text-lg font-semibold text-white mb-4">Device Performance</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-slate-800/40 rounded-xl p-6 border border-slate-800/60 backdrop-blur-sm">
+                    <h2 className="text-lg font-semibold text-white mb-6">Device Performance</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {['mobile', 'desktop', 'tablet'].map((deviceName) => {
                             const device = devices.devices ? devices.devices[deviceName] : null;
                             if (!device) return null;
 
                             const classColor = {
-                                significant_gain: 'border-green-500 bg-green-900/20',
-                                significant_drop: 'border-red-500 bg-red-900/20',
-                                flat: 'border-slate-600 bg-slate-700/50',
-                                insufficient_data: 'border-slate-700 bg-slate-800',
-                            }[device.classification] || 'border-slate-600';
+                                significant_gain: 'border-emerald-500/50 bg-emerald-950/20 text-emerald-400',
+                                significant_drop: 'border-rose-500/50 bg-rose-950/20 text-rose-400',
+                                flat: 'border-slate-700/50 bg-slate-800/40 text-slate-300',
+                                insufficient_data: 'border-slate-800 bg-slate-900/40 text-slate-500',
+                            }[device.classification] || 'border-slate-700';
 
                             return (
-                                <div key={deviceName} className={`border-l-4 rounded-lg p-4 ${classColor}`}>
-                                    <p className="text-sm text-slate-400 capitalize">{deviceName}</p>
-                                    <p className="text-xl font-bold text-white">
-                                        {device.last_7_impressions?.toLocaleString() || 0} impressions
+                                <div key={deviceName} className={`border-l-4 rounded-lg p-5 transition-all hover:bg-slate-800/20 ${classColor}`}>
+                                    <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-2">{deviceName}</p>
+                                    <p className="text-2xl font-bold text-white mb-1">
+                                        {device.last_7_impressions?.toLocaleString() || 0}
+                                        <span className="text-xs font-normal ml-2 opacity-50">imps</span>
                                     </p>
-                                    <p className="text-sm">
+                                    <p className="text-sm font-semibold">
                                         {device.classification === 'insufficient_data' ? (
-                                            <span className="text-slate-500">Insufficient data</span>
+                                            <span className="opacity-50">Insufficient data</span>
                                         ) : (
                                             formatDelta(device.delta_pct || 0)
                                         )}
@@ -172,92 +205,71 @@ export default function PropertyDashboard() {
                 </div>
             )}
 
-            {/* Page Visibility */}
+            {/* Page Movements */}
             {pages && (
-                <div className="bg-slate-800 rounded-xl p-6">
-                    <h2 className="text-lg font-semibold text-white mb-4">Page Visibility</h2>
-
-                    {/* Summary tabs */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-                        <div className="bg-green-900/30 border border-green-800 rounded-lg p-3 text-center">
-                            <p className="text-2xl font-bold text-green-400">{pages.totals?.new || 0}</p>
-                            <p className="text-xs text-green-300">New Pages</p>
-                        </div>
-                        <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 text-center">
-                            <p className="text-2xl font-bold text-red-400">{pages.totals?.lost || 0}</p>
-                            <p className="text-xs text-red-300">Lost Pages</p>
-                        </div>
-                        <div className="bg-green-900/30 border border-green-800 rounded-lg p-3 text-center">
-                            <p className="text-2xl font-bold text-green-400">{pages.totals?.gain || 0}</p>
-                            <p className="text-xs text-green-300">Gaining</p>
-                        </div>
-                        <div className="bg-red-900/30 border border-red-800 rounded-lg p-3 text-center">
-                            <p className="text-2xl font-bold text-red-400">{pages.totals?.drop || 0}</p>
-                            <p className="text-xs text-red-300">Dropping</p>
+                <div className="bg-slate-800/40 rounded-xl p-6 border border-slate-800/60 backdrop-blur-sm">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                        <h2 className="text-lg font-semibold text-white">Page Movements</h2>
+                        <div className="flex bg-slate-950/40 rounded-lg p-1 border border-slate-800/40 w-fit overflow-x-auto">
+                            {[
+                                { id: 'drop', label: 'Dropping' },
+                                { id: 'gain', label: 'Gaining' },
+                                { id: 'new', label: 'New' },
+                                { id: 'lost', label: 'Lost' }
+                            ].map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id as any)}
+                                    className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${activeTab === tab.id
+                                        ? 'bg-slate-700 text-white shadow-lg shadow-black/20'
+                                        : 'text-slate-500 hover:text-slate-300'
+                                        }`}
+                                >
+                                    {tab.label}
+                                    <span className={`ml-2 px-1.5 py-0.5 rounded-full text-[10px] ${pages.totals[tab.id as keyof typeof pages.totals] > 0
+                                        ? (tab.id === 'gain' || tab.id === 'new' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-rose-900/30 text-rose-400')
+                                        : 'bg-slate-900/50 text-slate-600'
+                                        }`}>
+                                        {pages.totals[tab.id as keyof typeof pages.totals]}
+                                    </span>
+                                </button>
+                            ))}
                         </div>
                     </div>
 
-                    {/* V1: Page Insights section removed - no health flags */}
-                    {/* V1: Filtered insight pages section removed - no health flags */}
-
-                    {/* Page lists */}
-                    <div className="mt-6 space-y-4">
-                        {/* Significant Drops */}
-                        {pages.pages.drop.length > 0 && (
-                            <div>
-                                <h3 className="text-sm font-medium text-red-400 mb-2">📉 Significant Drops</h3>
-                                <div className="space-y-1 max-h-48 overflow-y-auto">
-                                    {pages.pages.drop.slice(0, 10).map((page, i) => (
-                                        <div key={i} className="flex justify-between items-center bg-slate-700/50 rounded px-3 py-2 text-sm">
-                                            <span className="text-slate-300 truncate max-w-md" title={page.page_url}>
-                                                {page.page_url.replace(/^https?:\/\/[^/]+/, '')}
-                                            </span>
-                                            <span className="text-red-400 ml-2 whitespace-nowrap">
-                                                {formatDelta(page.delta_pct || 0)}
-                                            </span>
-                                        </div>
-                                    ))}
+                    <div className="bg-slate-950/20 rounded-lg border border-slate-800/30 overflow-hidden">
+                        <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+                            {pages.pages[activeTab].length > 0 ? (
+                                <table className="w-full text-sm">
+                                    <tbody className="divide-y divide-slate-800/10">
+                                        {pages.pages[activeTab].map((item: PageVisibilityItem, i: number) => (
+                                            <tr key={i} className="hover:bg-slate-800/10 transition-colors group">
+                                                <td className="px-5 py-4 max-w-[400px]">
+                                                    <div className="truncate text-slate-400 group-hover:text-slate-200 transition-colors font-medium" title={item.page_url}>
+                                                        {item.page_url.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-4 text-right">
+                                                    {activeTab === 'new' ? (
+                                                        <span className="text-emerald-400 font-bold">{item.impressions_last_7.toLocaleString()} imps</span>
+                                                    ) : activeTab === 'lost' ? (
+                                                        <span className="text-rose-500/80 font-bold">0 impressions</span>
+                                                    ) : (
+                                                        <span className={`font-bold ${activeTab === 'gain' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                            {formatDelta(item.delta_pct)}
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div className="py-20 text-center text-slate-600 font-medium text-sm">
+                                    No pages found in this category
                                 </div>
-                            </div>
-                        )}
-
-                        {/* Significant Gains */}
-                        {pages.pages.gain.length > 0 && (
-                            <div>
-                                <h3 className="text-sm font-medium text-green-400 mb-2">📈 Significant Gains</h3>
-                                <div className="space-y-1 max-h-48 overflow-y-auto">
-                                    {pages.pages.gain.slice(0, 10).map((page, i) => (
-                                        <div key={i} className="flex justify-between items-center bg-slate-700/50 rounded px-3 py-2 text-sm">
-                                            <span className="text-slate-300 truncate max-w-md" title={page.page_url}>
-                                                {page.page_url.replace(/^https?:\/\/[^/]+/, '')}
-                                            </span>
-                                            <span className="text-green-400 ml-2 whitespace-nowrap">
-                                                {formatDelta(page.delta_pct || 0)}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* New Pages */}
-                        {pages.pages.new.length > 0 && (
-                            <div>
-                                <h3 className="text-sm font-medium text-blue-400 mb-2">✨ New Pages</h3>
-                                <div className="space-y-1 max-h-48 overflow-y-auto">
-                                    {pages.pages.new.slice(0, 10).map((page, i) => (
-                                        <div key={i} className="flex justify-between items-center bg-slate-700/50 rounded px-3 py-2 text-sm">
-                                            <span className="text-slate-300 truncate max-w-md" title={page.page_url}>
-                                                {page.page_url.replace(/^https?:\/\/[^/]+/, '')}
-                                            </span>
-                                            <span className="text-blue-400 ml-2 whitespace-nowrap">
-                                                {page.impressions_last_7} impressions
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

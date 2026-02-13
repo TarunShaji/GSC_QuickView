@@ -11,6 +11,7 @@ interface PipelineGateProps {
 export default function PipelineGate({ children }: PipelineGateProps) {
     const { accountId } = useAuth();
     const [status, setStatus] = useState<PipelineStatus | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isStarting, setIsStarting] = useState(false);
 
@@ -20,8 +21,8 @@ export default function PipelineGate({ children }: PipelineGateProps) {
             const data = await api.pipeline.getStatus(accountId);
             setStatus(data);
             return data;
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch status');
+        } finally {
+            setIsLoading(false);
             return null;
         }
     };
@@ -30,13 +31,22 @@ export default function PipelineGate({ children }: PipelineGateProps) {
         pollStatus();
     }, [accountId]);
 
-    // Poll while running
+    // Poll while running or starting
     useEffect(() => {
-        if (!status?.is_running || !accountId) return;
+        if (!accountId) return;
 
-        const interval = setInterval(pollStatus, 1500);
+        // Stop polling if we are in a terminal state (completed or failed)
+        // AND not currently running
+        if (!status?.is_running && (status?.phase === 'completed' || status?.phase === 'failed')) {
+            return;
+        }
+
+        // If running or idle (to detect remote start), poll
+        // But poll faster if running, slower if idle
+        const intervalTime = status?.is_running ? 1500 : 5000;
+        const interval = setInterval(pollStatus, intervalTime);
         return () => clearInterval(interval);
-    }, [status?.is_running, accountId]);
+    }, [status?.is_running, status?.phase, accountId]);
 
     const handleRunPipeline = async () => {
         if (!accountId) return;
@@ -111,6 +121,15 @@ export default function PipelineGate({ children }: PipelineGateProps) {
                         </div>
                     )}
                 </div>
+            </div>
+        );
+    }
+
+    // Initial loading
+    if (isLoading && !status) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-900">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
             </div>
         );
     }

@@ -143,21 +143,17 @@ export default function DashboardSummary() {
                         <p className="text-slate-300 mb-6">
                             {summary.message || 'Data has not been initialized. Please run the pipeline to sync your properties.'}
                         </p>
-                        <button
-                            onClick={async () => {
-                                if (!accountId) return;
-                                try {
-                                    await api.pipeline.run(accountId);
-                                    // Refresh summary after pipeline starts
-                                    setTimeout(() => window.location.reload(), 1000);
-                                } catch (err) {
-                                    console.error('Failed to start pipeline:', err);
-                                }
-                            }}
-                            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-                        >
-                            Run Pipeline
-                        </button>
+                        <div className="text-center py-12">
+                            <div className="bg-slate-800 rounded-xl p-8 max-w-md mx-auto border border-slate-700">
+                                <div className="text-6xl mb-4">🚀</div>
+                                <h2 className="text-xl font-bold text-white mb-4">
+                                    Welcome to GSC Quick View
+                                </h2>
+                                <p className="text-slate-300 mb-6">
+                                    {summary.message || 'Wait while we prepare your dashboard...'}
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
