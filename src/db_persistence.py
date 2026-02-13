@@ -636,34 +636,36 @@ class DatabasePersistence:
     
     def fetch_page_metrics_for_analysis(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
         """
-        Fetch all page metrics required for visibility analysis.
-        Uses canonical ANALYSIS_WINDOW_DAYS + GSC_LAG_DAYS.
+        Fetch page impressions for V1 visibility analysis.
+        Only fetches: page_url, date, impressions
+        
+        Uses MAX(date) - 13 days to handle GSC lag correctly,
+        ensuring we always get complete 14-day windows.
         
         Args:
             account_id: UUID of the account
             property_id: UUID of the property
         
         Returns:
-            List of dicts with: page_url, date, clicks, impressions, ctr, position
+            List of dicts with: page_url, date, impressions
         """
         try:
-            lookback_interval = ANALYSIS_WINDOW_DAYS + GSC_LAG_DAYS
-            
-            self.cursor.execute(f"""
+            self.cursor.execute("""
                 SELECT 
                     m.page_url,
                     m.date,
-                    m.clicks,
-                    m.impressions,
-                    m.ctr,
-                    m.position
+                    m.impressions
                 FROM page_daily_metrics m
                 JOIN properties p ON m.property_id = p.id
                 WHERE m.property_id = %s
                   AND p.account_id = %s
-                  AND m.date >= CURRENT_DATE - INTERVAL '%s days'
+                  AND m.date >= (
+                      SELECT MAX(date) - INTERVAL '13 days'
+                      FROM page_daily_metrics
+                      WHERE property_id = %s
+                  )
                 ORDER BY m.date DESC, m.page_url
-            """, (property_id, account_id, lookback_interval))
+            """, (property_id, account_id, property_id))
             
             metrics = self.cursor.fetchall()
             return [dict(metric) for metric in metrics]
@@ -807,7 +809,7 @@ class DatabasePersistence:
 
     def persist_page_visibility_analysis(self, property_id: str, analysis_results: dict) -> int:
         """
-        Persist page visibility analysis to page_visibility_analysis table.
+        Persist page visibility analysis to page_visibility_analysis table (V1).
         
         Strategy:
         - Delete existing records for property_id (idempotent)
@@ -817,13 +819,13 @@ class DatabasePersistence:
         Args:
             property_id: UUID of the property
             analysis_results: Dictionary with keys: 'new_pages', 'lost_pages', 
-                            'significant_drops', 'significant_gains'
+                            'gains', 'drops'
                             Each value is a list of page dicts
         
         Returns:
             Total number of rows inserted
         
-        Schema (18 data columns):
+        V1 Schema (7 data columns):
             - property_id (uuid)
             - category (text): 'new' | 'lost' | 'drop' | 'gain'
             - page_url (text)
@@ -831,17 +833,6 @@ class DatabasePersistence:
             - impressions_prev_7 (int4)
             - delta (int4)
             - delta_pct (numeric)
-            - clicks_last_7 (int4)
-            - clicks_prev_7 (int4)
-            - ctr_last_7 (numeric)
-            - ctr_prev_7 (numeric)
-            - avg_position_last_7 (numeric)
-            - avg_position_prev_7 (numeric)
-            - title_optimization (bool)
-            - ranking_push (bool)
-            - zero_click (bool)
-            - low_ctr_pos_1_3 (bool)
-            - strong_gainer (bool)
             - created_at (timestamptz)
         """
         if not self.connection or not self.cursor:
@@ -861,8 +852,8 @@ class DatabasePersistence:
             category_mapping = {
                 'new_pages': 'new',
                 'lost_pages': 'lost',
-                'significant_drops': 'drop',
-                'significant_gains': 'gain'
+                'drops': 'drop',
+                'gains': 'gain'
             }
             
             for result_key, category in category_mapping.items():
@@ -871,24 +862,11 @@ class DatabasePersistence:
                     rows_to_insert.append((
                         property_id,
                         category,
-                        page.get('page_url'),
-                        page.get('impressions_last_7', 0),
-                        page.get('impressions_prev_7', 0),
-                        page.get('delta', 0),
-                        page.get('delta_pct', 0.0),
-                        # New metric columns
-                        page.get('clicks_last_7', 0),
-                        page.get('clicks_prev_7', 0),
-                        page.get('ctr_last_7', 0.0),
-                        page.get('ctr_prev_7', 0.0),
-                        page.get('position_last_7', 0.0),
-                        page.get('position_prev_7', 0.0),
-                        # Health flags
-                        page.get('title_optimization', False),
-                        page.get('ranking_push', False),
-                        page.get('zero_click', False),
-                        page.get('low_ctr_pos_1_3', False),
-                        page.get('strong_gainer', False)
+                        page['page_url'],
+                        page['impressions_last_7'],
+                        page['impressions_prev_7'],
+                        page['delta'],
+                        page['delta_pct']
                     ))
             
             # Batch insert
@@ -897,13 +875,9 @@ class DatabasePersistence:
                     self.cursor,
                     """
                     INSERT INTO page_visibility_analysis 
-                        (property_id, category, page_url, impressions_last_7, 
-                         impressions_prev_7, delta, delta_pct,
-                         clicks_last_7, clicks_prev_7, ctr_last_7, ctr_prev_7,
-                         avg_position_last_7, avg_position_prev_7,
-                         title_optimization, ranking_push, zero_click,
-                         low_ctr_pos_1_3, strong_gainer, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                        (property_id, category, page_url, impressions_last_7,
+                         impressions_prev_7, delta, delta_pct, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                     """,
                     rows_to_insert,
                     page_size=100
@@ -1107,7 +1081,7 @@ class DatabasePersistence:
 
     def fetch_page_visibility_analysis(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
         """
-        Fetch page visibility analysis for a property.
+        Fetch page visibility analysis for a property (V1).
         Strictly checked for account ownership.
         
         Args:
@@ -1115,12 +1089,8 @@ class DatabasePersistence:
             property_id: UUID of the property
         
         Returns:
-            List of dicts with: category, page_url, impressions_last_7, 
-                               impressions_prev_7, delta, delta_pct,
-                               clicks_last_7, clicks_prev_7, ctr_last_7, ctr_prev_7,
-                               avg_position_last_7, avg_position_prev_7,
-                               title_optimization, ranking_push, zero_click,
-                               low_ctr_pos_1_3, strong_gainer
+            List of dicts with: category, page_url, impressions_last_7,
+                               impressions_prev_7, delta, delta_pct
         """
         if not self.connection or not self.cursor:
             raise RuntimeError("Database connection not established")
@@ -1128,13 +1098,8 @@ class DatabasePersistence:
         try:
             self.cursor.execute("""
                 SELECT 
-                    v.category, v.page_url, v.impressions_last_7, 
-                    v.impressions_prev_7, v.delta, v.delta_pct,
-                    v.clicks_last_7, v.clicks_prev_7, 
-                    v.ctr_last_7, v.ctr_prev_7,
-                    v.avg_position_last_7, v.avg_position_prev_7,
-                    v.title_optimization, v.ranking_push, v.zero_click,
-                    v.low_ctr_pos_1_3, v.strong_gainer
+                    v.category, v.page_url, v.impressions_last_7,
+                    v.impressions_prev_7, v.delta, v.delta_pct
                 FROM page_visibility_analysis v
                 JOIN properties p ON v.property_id = p.id
                 WHERE v.property_id = %s AND p.account_id = %s

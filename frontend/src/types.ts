@@ -74,20 +74,6 @@ export interface PageVisibilityItem {
     impressions_prev_7: number;
     delta: number;
     delta_pct: number;
-    created_at: string;
-    // New metric columns
-    clicks_last_7: number;
-    clicks_prev_7: number;
-    ctr_last_7: number;
-    ctr_prev_7: number;
-    avg_position_last_7: number;
-    avg_position_prev_7: number;
-    // Health flags
-    title_optimization: boolean;
-    ranking_push: boolean;
-    zero_click: boolean;
-    low_ctr_pos_1_3: boolean;
-    strong_gainer: boolean;
 }
 
 export interface PageVisibilityResponse {
@@ -124,4 +110,35 @@ export interface DeviceVisibilityResponse {
 export interface RecipientsResponse {
     account_id: string;
     recipients: string[];
+}
+
+export interface PropertySummary {
+    property_id: string;
+    property_name: string;
+    status: 'healthy' | 'warning' | 'critical' | 'insufficient_data';
+    data_through: string;
+    last_7: {
+        impressions: number;
+        clicks: number;
+    };
+    prev_7: {
+        impressions: number;
+        clicks: number;
+    };
+    delta_pct: {
+        impressions: number;
+        clicks: number;
+    };
+}
+
+export interface WebsiteSummary {
+    website_id: string;
+    website_domain: string;
+    properties: PropertySummary[];
+}
+
+export interface DashboardSummaryResponse {
+    status?: 'not_initialized';
+    message?: string;
+    websites: WebsiteSummary[];
 }

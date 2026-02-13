@@ -10,7 +10,8 @@ import type {
     PropertyOverview,
     PageVisibilityResponse,
     DeviceVisibilityResponse,
-    RecipientsResponse
+    RecipientsResponse,
+    DashboardSummaryResponse
 } from './types';
 
 const API_BASE = '/api';
@@ -55,6 +56,11 @@ export const api = {
             fetchJson<Website[]>(`/websites?account_id=${accountId}`),
         getProperties: (accountId: string, websiteId: string) =>
             fetchJson<Property[]>(`/websites/${websiteId}/properties?account_id=${accountId}`),
+    },
+
+    dashboard: {
+        getSummary: (accountId: string) =>
+            fetchJson<DashboardSummaryResponse>(`/dashboard-summary?account_id=${accountId}`),
     },
 
     properties: {

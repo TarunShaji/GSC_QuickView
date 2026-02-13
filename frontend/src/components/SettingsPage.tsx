@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../AuthContext';
 
 export default function SettingsPage() {
     const { accountId, email: accountEmail } = useAuth();
+    const navigate = useNavigate();
     const [recipients, setRecipients] = useState<string[]>([]);
     const [newEmail, setNewEmail] = useState('');
     const [isLoading, setIsLoading] = useState(true);
@@ -74,6 +76,26 @@ export default function SettingsPage() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-8">
+            <div className="flex items-center gap-6 mb-6">
+                <h1 className="text-2xl font-bold text-white">Settings</h1>
+                <nav className="flex gap-4">
+                    <button
+                        onClick={() => navigate('/')}
+                        className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                    >
+                        Dashboard
+                    </button>
+                    <button
+                        onClick={() => navigate('/alerts')}
+                        className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                    >
+                        Alerts
+                    </button>
+                    <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg">
+                        Settings
+                    </button>
+                </nav>
+            </div>
             <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
                 <h2 className="text-xl font-semibold text-white mb-2">Account Settings</h2>
                 <p className="text-slate-400 text-sm">

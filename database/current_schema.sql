@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict bsq5Fq97Ogm0GmsBLKI77ZQh0Q8JMeGLosUJ2X8imUTAyQVlPDO5vTME8TH7Tm5
+\restrict WaQnoDObwxqezFAUqAWe97SdJ7OnmtL5uP0YZAzdTdhwOG15C2HqA0c4JiNI0qk
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.1 (Postgres.app)
@@ -3190,7 +3190,9 @@ COMMENT ON COLUMN auth.users.is_sso_user IS 'Auth: Set this column to true when 
 CREATE TABLE public.accounts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     google_email text NOT NULL,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now(),
+    data_initialized boolean DEFAULT false
 );
 
 
@@ -3339,6 +3341,7 @@ CREATE TABLE public.page_visibility_analysis (
     delta integer NOT NULL,
     delta_pct numeric(10,2) NOT NULL,
     created_at timestamp with time zone DEFAULT now(),
+    CONSTRAINT category_check CHECK ((category = ANY (ARRAY['new'::text, 'lost'::text, 'gain'::text, 'drop'::text]))),
     CONSTRAINT page_visibility_analysis_category_check CHECK ((category = ANY (ARRAY['new'::text, 'lost'::text, 'drop'::text, 'gain'::text])))
 );
 
@@ -3897,11 +3900,11 @@ ALTER TABLE ONLY public.accounts
 
 
 --
--- Name: alert_recipients alert_recipients_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: alert_recipients alert_recipients_account_email_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.alert_recipients
-    ADD CONSTRAINT alert_recipients_email_key UNIQUE (email);
+    ADD CONSTRAINT alert_recipients_account_email_unique UNIQUE (account_id, email);
 
 
 --
@@ -6624,5 +6627,5 @@ ALTER EVENT TRIGGER pgrst_drop_watch OWNER TO supabase_admin;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict bsq5Fq97Ogm0GmsBLKI77ZQh0Q8JMeGLosUJ2X8imUTAyQVlPDO5vTME8TH7Tm5
+\unrestrict WaQnoDObwxqezFAUqAWe97SdJ7OnmtL5uP0YZAzdTdhwOG15C2HqA0c4JiNI0qk
 
