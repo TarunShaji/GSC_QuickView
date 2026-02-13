@@ -1,11 +1,8 @@
-"""
-Database Persistence Layer
-Handles insertion of websites and properties and metrics into Supabase
-"""
-
 import os
 import psycopg2
+import threading
 from psycopg2.extras import RealDictCursor, execute_batch
+from psycopg2.pool import ThreadedConnectionPool
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 from datetime import datetime
@@ -16,41 +13,71 @@ from config.date_windows import GSC_LAG_DAYS, ANALYSIS_WINDOW_DAYS, INGESTION_WI
 # Load environment variables
 load_dotenv()
 
+# -------------------------------------------------------------------------
+# Global Connection Pool Manager
+# -------------------------------------------------------------------------
+
+_db_pool: Optional[ThreadedConnectionPool] = None
+_pool_lock = threading.Lock()
+
+def init_db_pool(db_url: str, minconn: int = 1, maxconn: int = 10):
+    """Initialize the global database connection pool once."""
+    global _db_pool
+    with _pool_lock:
+        if _db_pool is None:
+            print(f"[DB] Initializing connection pool (maxconn={maxconn})...")
+            _db_pool = ThreadedConnectionPool(minconn, maxconn, db_url)
+            print("[DB] ✓ Connection pool initialized")
+
+def get_db_pool() -> ThreadedConnectionPool:
+    """Get the global database connection pool."""
+    if _db_pool is None:
+        raise RuntimeError("Database connection pool not initialized. Call init_db_pool() first.")
+    return _db_pool
+
+def close_db_pool():
+    """Close the global database connection pool."""
+    global _db_pool
+    if _db_pool:
+        _db_pool.closeall()
+        print("[DB] Connection pool closed")
+        _db_pool = None
+
 
 class DatabasePersistence:
     """Handles database operations for websites and properties"""
 
     def __init__(self):
-        self.db_url = os.getenv('SUPABASE_DB_URL')
-        if not self.db_url:
-            raise ValueError(
-                "SUPABASE_DB_URL not found in environment variables. "
-                "Please add it to /src/.env file."
-            )
+        self.pool = get_db_pool()
         self.connection = None
         self.cursor = None
     
     def connect(self) -> None:
         """
-        Establish database connection
-        Raises explicit error if connection fails
+        Borrow a database connection from the pool
         """
         try:
-            print("[DB] Connecting to Supabase...")
-            self.connection = psycopg2.connect(self.db_url)
+            # No more "Connecting to Supabase" spam per-request
+            self.connection = self.pool.getconn()
             self.cursor = self.connection.cursor(cursor_factory=RealDictCursor)
-            print("[DB] ✓ Connected successfully")
-        except psycopg2.Error as e:
-            print(f"[DB] ✗ Connection failed: {e}")
+        except Exception as e:
+            print(f"[DB] ✗ Failed to get connection from pool: {e}")
             raise RuntimeError(f"Database connection failed: {e}") from e
     
     def disconnect(self) -> None:
-        """Close database connection"""
+        """Return database connection to the pool"""
         if self.cursor:
-            self.cursor.close()
+            try:
+                self.cursor.close()
+            except:
+                pass
         if self.connection:
-            self.connection.close()
-            print("[DB] Connection closed")
+            try:
+                self.pool.putconn(self.connection)
+            except:
+                pass
+            self.connection = None
+            self.cursor = None
     
     def begin_transaction(self) -> None:
         """Begin a database transaction"""
@@ -788,12 +815,14 @@ class DatabasePersistence:
                 WHERE m.property_id = %s
                   AND p.account_id = %s
                   AND m.date >= (
-                      SELECT MAX(date) - INTERVAL '%s days'
-                      FROM device_daily_metrics
-                      WHERE property_id = %s
+                      SELECT MAX(m2.date) - INTERVAL '%s days'
+                      FROM device_daily_metrics m2
+                      JOIN properties p2 ON m2.property_id = p2.id
+                      WHERE m2.property_id = %s
+                        AND p2.account_id = %s
                   )
                 ORDER BY m.date DESC, m.device
-            """, (property_id, account_id, lookback_days, property_id))
+            """, (property_id, account_id, lookback_days, property_id, account_id))
             
             metrics = self.cursor.fetchall()
             return [dict(row) for row in metrics]
@@ -936,9 +965,13 @@ class DatabasePersistence:
                     device,
                     data.get('last_7_impressions', 0),
                     data.get('prev_7_impressions', 0),
-                    data.get('delta', 0),
-                    data.get('delta_pct', 0.0),
-                    data.get('classification', 'flat')
+                    data.get('impressions_delta_pct', 0.0),
+                    data.get('last_7_clicks', 0),
+                    data.get('prev_7_clicks', 0),
+                    data.get('clicks_delta_pct', 0.0),
+                    data.get('last_7_ctr', 0.0),
+                    data.get('prev_7_ctr', 0.0),
+                    data.get('ctr_delta_pct', 0.0)
                 ))
             
             if rows_to_insert:
@@ -946,9 +979,12 @@ class DatabasePersistence:
                     self.cursor,
                     """
                     INSERT INTO device_visibility_analysis 
-                        (property_id, device, last_7_impressions, prev_7_impressions, 
-                         delta, delta_pct, classification, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                        (property_id, device, 
+                         last_7_impressions, prev_7_impressions, impressions_delta_pct,
+                         last_7_clicks, prev_7_clicks, clicks_delta_pct,
+                         last_7_ctr, prev_7_ctr, ctr_delta_pct, 
+                         created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     """,
                     rows_to_insert,
                     page_size=10
@@ -1127,8 +1163,7 @@ class DatabasePersistence:
             property_id: UUID of the property
         
         Returns:
-            List of dicts with: device, last_7_impressions, prev_7_impressions,
-                               delta, delta_pct, classification
+            List of dicts with 10 analytical columns per device.
         """
         if not self.connection or not self.cursor:
             raise RuntimeError("Database connection not established")
@@ -1136,12 +1171,21 @@ class DatabasePersistence:
         try:
             self.cursor.execute("""
                 SELECT 
-                    v.device, v.last_7_impressions, v.prev_7_impressions,
-                    v.delta, v.delta_pct, v.classification
+                    v.device, 
+                    v.last_7_impressions, 
+                    v.prev_7_impressions, 
+                    v.impressions_delta_pct,
+                    v.last_7_clicks, 
+                    v.prev_7_clicks, 
+                    v.clicks_delta_pct,
+                    v.last_7_ctr, 
+                    v.prev_7_ctr, 
+                    v.ctr_delta_pct
                 FROM device_visibility_analysis v
                 JOIN properties p ON v.property_id = p.id
-                WHERE v.property_id = %s AND p.account_id = %s
-                ORDER BY v.delta_pct ASC
+                WHERE v.property_id = %s
+                  AND p.account_id = %s
+                ORDER BY v.device ASC
             """, (property_id, account_id))
             
             results = self.cursor.fetchall()

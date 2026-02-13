@@ -96,10 +96,13 @@ export interface DeviceVisibility {
     device: string;
     last_7_impressions: number;
     prev_7_impressions: number;
-    delta: number;
-    delta_pct: number;
-    classification: string;
-    created_at: string;
+    impressions_delta_pct: number;
+    last_7_clicks: number;
+    prev_7_clicks: number;
+    clicks_delta_pct: number;
+    last_7_ctr: number;
+    prev_7_ctr: number;
+    ctr_delta_pct: number;
 }
 
 export interface DeviceVisibilityResponse {

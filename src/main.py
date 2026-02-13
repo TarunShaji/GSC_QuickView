@@ -6,7 +6,7 @@ Multi-Account Aware
 from gsc_client import GSCClient, AuthError
 
 from utils.urls import extract_base_domain
-from db_persistence import DatabasePersistence
+from db_persistence import DatabasePersistence, init_db_pool, close_db_pool
 from property_metrics_daily_ingestor import PropertyMetricsDailyIngestor
 from page_metrics_daily_ingestor import PageMetricsDailyIngestor
 from device_metrics_daily_ingestor import DeviceMetricsDailyIngestor
@@ -264,18 +264,30 @@ def run_pipeline(account_id: str):
 
 def main():
     """CLI Entrypoint for testing - runs the first account found in DB"""
-    db = DatabasePersistence()
-    db.connect()
-    accounts = db.fetch_all_accounts()
-    db.disconnect()
-    
-    if not accounts:
-        print("❌ No accounts found in database. Please login via web first.")
+    import os
+    db_url = os.getenv("SUPABASE_DB_URL")
+    if not db_url:
+        print("❌ SUPABASE_DB_URL not found in environment.")
         return
+
+    # Initialize pool for CLI process
+    init_db_pool(db_url, minconn=1, maxconn=5)
+    
+    try:
+        db = DatabasePersistence()
+        db.connect()
+        accounts = db.fetch_all_accounts()
+        db.disconnect()
         
-    account = accounts[0]
-    print(f"🚀 Starting CLI test run for account: {account['google_email']}")
-    run_pipeline(account['id'])
+        if not accounts:
+            print("❌ No accounts found in database. Please login via web first.")
+            return
+            
+        account = accounts[0]
+        print(f"🚀 Starting CLI test run for account: {account['google_email']}")
+        run_pipeline(account['id'])
+    finally:
+        close_db_pool()
 
 
 if __name__ == '__main__':

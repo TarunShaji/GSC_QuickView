@@ -1,8 +1,5 @@
-"""
-FastAPI wrapper for GSC Quick View pipeline.
-Multi-Account Aware
-"""
-
+import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
@@ -15,14 +12,35 @@ from decimal import Decimal
 from main import run_pipeline
 from gsc_client import AuthError
 from auth_handler import GoogleAuthHandler
-from db_persistence import DatabasePersistence
+from db_persistence import DatabasePersistence, init_db_pool, close_db_pool
+
+
+# -------------------------------------------------------------------------
+# Lifespan
+# -------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage database connection pool lifecycle."""
+    db_url = os.getenv("SUPABASE_DB_URL")
+    if not db_url:
+        raise ValueError("SUPABASE_DB_URL not found in environment.")
+    
+    # Initialize global pool
+    init_db_pool(db_url, minconn=1, maxconn=10)
+    
+    yield
+    
+    # Clean shutdown
+    close_db_pool()
 
 
 # Initialize FastAPI app
 app = FastAPI(
     title="GSC Quick View API",
     description="HTTP wrapper for multi-account Google Search Console analytics pipeline",
-    version="2.0.0"
+    version="2.0.0",
+    lifespan=lifespan
 )
 
 
@@ -489,13 +507,22 @@ def get_page_visibility(property_id: str, account_id: str):
 
 @app.get("/properties/{property_id}/devices")
 def get_device_visibility(property_id: str, account_id: str):
-    """Get device visibility analysis for a property"""
+    """Get device visibility analysis for a property (pure passthrough)"""
     db = DatabasePersistence()
     db.connect()
     try:
-        devices = db.fetch_device_visibility_analysis(account_id, property_id)
-        result = {d.get("device", "unknown"): serialize_row(d) for d in devices}
-        return {"property_id": property_id, "devices": result}
+        rows = db.fetch_device_visibility_analysis(account_id, property_id)
+        
+        result = {}
+        for row in rows:
+            serialized = serialize_row(row)
+            device_name = serialized.get("device", "unknown")
+            result[device_name] = serialized
+            
+        return {
+            "property_id": property_id, 
+            "devices": result
+        }
     finally:
         db.disconnect()
 

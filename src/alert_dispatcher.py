@@ -176,7 +176,15 @@ def main():
     
     try:
         # Import and connect to database
-        from db_persistence import DatabasePersistence
+        from db_persistence import DatabasePersistence, init_db_pool, close_db_pool
+        
+        # Initialize pool for Cron process
+        db_url = os.getenv("SUPABASE_DB_URL")
+        if not db_url:
+            log_dispatcher("❌ SUPABASE_DB_URL not found in environment.")
+            return
+
+        init_db_pool(db_url, minconn=1, maxconn=5)
         
         db = DatabasePersistence()
         db.connect()
@@ -200,7 +208,9 @@ def main():
         if db:
             try:
                 db.disconnect()
-                log_dispatcher("Database connection closed")
+                # Close pool for Cron process
+                close_db_pool()
+                log_dispatcher("Database connection and pool closed")
             except Exception as e:
                 log_dispatcher(f"Error disconnecting: {e}")
 

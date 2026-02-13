@@ -171,36 +171,68 @@ export default function PropertyDashboard() {
             {/* Device Performance */}
             {devices && (
                 <div className="bg-slate-800/40 rounded-xl p-6 border border-slate-800/60 backdrop-blur-sm">
-                    <h2 className="text-lg font-semibold text-white mb-6">Device Performance</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {['mobile', 'desktop', 'tablet'].map((deviceName) => {
-                            const device = devices.devices ? devices.devices[deviceName] : null;
-                            if (!device) return null;
+                    <h2 className="text-lg font-semibold text-white mb-6">
+                        Device Performance
+                    </h2>
 
-                            const classColor = {
-                                significant_gain: 'border-emerald-500/50 bg-emerald-950/20 text-emerald-400',
-                                significant_drop: 'border-rose-500/50 bg-rose-950/20 text-rose-400',
-                                flat: 'border-slate-700/50 bg-slate-800/40 text-slate-300',
-                                insufficient_data: 'border-slate-800 bg-slate-900/40 text-slate-500',
-                            }[device.classification] || 'border-slate-700';
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="text-slate-500 border-b border-slate-700/30">
+                                    <th className="text-left py-3">Device</th>
+                                    <th className="text-right py-3">Impressions</th>
+                                    <th className="text-right py-3">Clicks</th>
+                                    <th className="text-right py-3">CTR</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800/20">
+                                {['mobile', 'desktop', 'tablet'].map(deviceKey => {
+                                    const device = devices.devices ? devices.devices[deviceKey] : null;
+                                    if (!device) return null;
 
-                            return (
-                                <div key={deviceName} className={`border-l-4 rounded-lg p-5 transition-all hover:bg-slate-800/20 ${classColor}`}>
-                                    <p className="text-xs font-bold uppercase tracking-widest opacity-70 mb-2">{deviceName}</p>
-                                    <p className="text-2xl font-bold text-white mb-1">
-                                        {device.last_7_impressions?.toLocaleString() || 0}
-                                        <span className="text-xs font-normal ml-2 opacity-50">imps</span>
-                                    </p>
-                                    <p className="text-sm font-semibold">
-                                        {device.classification === 'insufficient_data' ? (
-                                            <span className="opacity-50">Insufficient data</span>
-                                        ) : (
-                                            formatDelta(device.delta_pct || 0)
-                                        )}
-                                    </p>
-                                </div>
-                            );
-                        })}
+                                    const formatInlineDelta = (val: number) => {
+                                        if (val > 0) return <span className="text-green-400 font-medium">+{val.toFixed(1)}%</span>;
+                                        if (val < 0) return <span className="text-red-400 font-medium">{val.toFixed(1)}%</span>;
+                                        return <span className="text-slate-400 font-medium">0.0%</span>;
+                                    };
+
+                                    return (
+                                        <tr key={deviceKey} className="hover:bg-slate-800/10 transition-colors">
+                                            <td className="py-4 capitalize text-slate-300 font-medium">
+                                                {deviceKey}
+                                            </td>
+
+                                            <td className="py-4 text-right">
+                                                <div className="text-white font-semibold">
+                                                    {device.last_7_impressions.toLocaleString()}
+                                                </div>
+                                                <div className="text-[11px] mt-0.5">
+                                                    {formatInlineDelta(device.impressions_delta_pct)}
+                                                </div>
+                                            </td>
+
+                                            <td className="py-4 text-right">
+                                                <div className="text-white font-semibold">
+                                                    {device.last_7_clicks.toLocaleString()}
+                                                </div>
+                                                <div className="text-[11px] mt-0.5">
+                                                    {formatInlineDelta(device.clicks_delta_pct)}
+                                                </div>
+                                            </td>
+
+                                            <td className="py-4 text-right">
+                                                <div className="text-white font-semibold">
+                                                    {(device.last_7_ctr * 100).toFixed(1)}%
+                                                </div>
+                                                <div className="text-[11px] mt-0.5">
+                                                    {formatInlineDelta(device.ctr_delta_pct)}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             )}
