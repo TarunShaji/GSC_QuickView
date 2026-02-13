@@ -6,7 +6,8 @@ Multi-Account Aware
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Dict, List, Any, Optional
+from config.date_windows import GSC_LAG_DAYS, ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 from datetime import datetime
 from decimal import Decimal
 
@@ -205,21 +206,26 @@ def get_property_overview(property_id: str, account_id: str):
             "days_with_data": 0
         }
         
-        # Aggregate metrics into 7-day windows
+        # Aggregate metrics into canonical windows
+        # Metrics are already sorted DESC
+        
+        # Windows derive from source-of-truth constants
+        window_size = HALF_ANALYSIS_WINDOW
+        
         for row in metrics:
             row_date = row['date']
             days_ago = (most_recent_date - row_date).days
             
-            # Last 7 days: 0-6 days ago from most_recent_date
-            if 0 <= days_ago <= 6:
+            # Last window (e.g. 0-6 days ago)
+            if 0 <= days_ago < window_size:
                 last_7["clicks"] += row['clicks'] or 0
                 last_7["impressions"] += row['impressions'] or 0
                 if row.get('position'):
                     last_7["position_sum"] += float(row['position'])
                     last_7["position_days"] += 1
                 last_7["days_with_data"] += 1
-            # Previous 7 days: 7-13 days ago from most_recent_date
-            elif 7 <= days_ago <= 13:
+            # Previous window (e.g. 7-13 days ago)
+            elif window_size <= days_ago < ANALYSIS_WINDOW_DAYS:
                 prev_7["clicks"] += row['clicks'] or 0
                 prev_7["impressions"] += row['impressions'] or 0
                 if row.get('position'):
@@ -388,21 +394,26 @@ def get_dashboard_summary(account_id: str):
                 most_recent_date = max(row['date'] for row in metrics)
                 
                 # Initialize 7v7 windows (days 1-7 vs days 8-14)
-                last_7 = {"clicks": 0, "impressions": 0}
-                prev_7 = {"clicks": 0, "impressions": 0}
+                last_7 = {"clicks": 0, "impressions": 0, "days": 0}
+                prev_7 = {"clicks": 0, "impressions": 0, "days": 0}
+                
+                # Windows derive from constants
+                window_size = HALF_ANALYSIS_WINDOW
                 
                 for row in metrics:
                     row_date = row['date']
                     days_ago = (most_recent_date - row_date).days
                     
-                    # Last 7 days: 0-6 days ago
-                    if 0 <= days_ago <= 6:
+                    # Last window (e.g. 0-6 days ago)
+                    if 0 <= days_ago < window_size:
                         last_7["clicks"] += row['clicks'] or 0
                         last_7["impressions"] += row['impressions'] or 0
-                    # Previous 7 days: 7-13 days ago
-                    elif 7 <= days_ago <= 13:
+                        last_7["days"] += 1
+                    # Previous window
+                    elif window_size <= days_ago < ANALYSIS_WINDOW_DAYS:
                         prev_7["clicks"] += row['clicks'] or 0
                         prev_7["impressions"] += row['impressions'] or 0
+                        prev_7["days"] += 1
                 
                 # Compute delta percentages
                 impressions_delta_pct = round(

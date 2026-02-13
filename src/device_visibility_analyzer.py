@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Dict, List, Any
 from db_persistence import DatabasePersistence
 from utils.classification import classify_delta
-from config.date_windows import ANALYSIS_WINDOW_DAYS
+from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 
 
 class DeviceVisibilityAnalyzer:
@@ -71,7 +71,7 @@ class DeviceVisibilityAnalyzer:
             # Insufficient data for this device
             return ([], [])
             
-        window_size = ANALYSIS_WINDOW_DAYS // 2
+        window_size = HALF_ANALYSIS_WINDOW
         last_7 = device_metrics[0:window_size]
         previous_7 = device_metrics[window_size:ANALYSIS_WINDOW_DAYS]
         

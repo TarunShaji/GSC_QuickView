@@ -4381,3 +4381,339 @@
 [11:00:04] [DISPATCHER] ============================================================
 [DB] Connection closed
 [11:00:04] [DISPATCHER] Database connection closed
+[11:05:01] [DISPATCHER] ============================================================
+[11:05:01] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[11:05:01] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[11:05:02] [DISPATCHER] Database connection established
+[11:05:02] [DISPATCHER] Starting multi-account alert dispatcher
+[11:05:04] [DISPATCHER] ✅ SMTP connection authenticated
+[11:05:04] [DISPATCHER] [ACCOUNT: seo1@cubehq.ai] No recipients configured
+[11:05:05] [DISPATCHER] SMTP connection closed
+[11:05:05] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[11:05:05] [DISPATCHER] ============================================================
+[11:05:05] [DISPATCHER] Summary: 0 sent, 0 failed
+[11:05:05] [DISPATCHER] ============================================================
+[DB] Connection closed
+[11:05:05] [DISPATCHER] Database connection closed
+[11:10:00] [DISPATCHER] ============================================================
+[11:10:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[11:10:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[11:10:01] [DISPATCHER] Database connection established
+[11:10:01] [DISPATCHER] Starting multi-account alert dispatcher
+[11:10:03] [DISPATCHER] ✅ SMTP connection authenticated
+[11:10:03] [DISPATCHER] [ACCOUNT: seo1@cubehq.ai] No recipients configured
+[11:10:04] [DISPATCHER] SMTP connection closed
+[11:10:04] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[11:10:04] [DISPATCHER] ============================================================
+[11:10:04] [DISPATCHER] Summary: 0 sent, 0 failed
+[11:10:04] [DISPATCHER] ============================================================
+[DB] Connection closed
+[11:10:04] [DISPATCHER] Database connection closed
+[11:15:00] [DISPATCHER] ============================================================
+[11:15:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[11:15:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[11:15:01] [DISPATCHER] Database connection established
+[11:15:01] [DISPATCHER] Starting multi-account alert dispatcher
+[11:15:03] [DISPATCHER] ✅ SMTP connection authenticated
+[11:15:04] [DISPATCHER] [ACCOUNT: seo1@cubehq.ai] No recipients configured
+[11:15:04] [DISPATCHER] SMTP connection closed
+[11:15:04] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[11:15:04] [DISPATCHER] ============================================================
+[11:15:04] [DISPATCHER] Summary: 0 sent, 0 failed
+[11:15:04] [DISPATCHER] ============================================================
+[DB] Connection closed
+[11:15:04] [DISPATCHER] Database connection closed
+[11:20:01] [DISPATCHER] ============================================================
+[11:20:01] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[11:20:01] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[11:20:01] [DISPATCHER] Database connection established
+[11:20:01] [DISPATCHER] Starting multi-account alert dispatcher
+[11:20:03] [DISPATCHER] ✅ SMTP connection authenticated
+[11:20:04] [DISPATCHER] SMTP connection closed
+[11:20:04] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[11:20:04] [DISPATCHER] ============================================================
+[11:20:04] [DISPATCHER] Summary: 0 sent, 0 failed
+[11:20:04] [DISPATCHER] ============================================================
+[DB] Connection closed
+[11:20:04] [DISPATCHER] Database connection closed
+[11:25:00] [DISPATCHER] ============================================================
+[11:25:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[11:25:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[11:25:01] [DISPATCHER] Database connection established
+[11:25:01] [DISPATCHER] Starting multi-account alert dispatcher
+[11:25:03] [DISPATCHER] ✅ SMTP connection authenticated
+[11:25:03] [DISPATCHER] [ACCOUNT: seo6@cubehq.ai] No recipients configured
+[11:25:03] [DISPATCHER] SMTP connection closed
+[11:25:03] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[11:25:03] [DISPATCHER] ============================================================
+[11:25:03] [DISPATCHER] Summary: 0 sent, 0 failed
+[11:25:03] [DISPATCHER] ============================================================
+[DB] Connection closed
+[11:25:03] [DISPATCHER] Database connection closed
+[11:30:00] [DISPATCHER] ============================================================
+[11:30:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[11:30:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[11:30:01] [DISPATCHER] Database connection established
+[11:30:01] [DISPATCHER] Starting multi-account alert dispatcher
+[11:30:03] [DISPATCHER] ✅ SMTP connection authenticated
+[11:30:04] [DISPATCHER] [ACCOUNT: seo6@cubehq.ai] No recipients configured
+[11:30:04] [DISPATCHER] SMTP connection closed
+[11:30:04] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[11:30:04] [DISPATCHER] ============================================================
+[11:30:04] [DISPATCHER] Summary: 0 sent, 0 failed
+[11:30:04] [DISPATCHER] ============================================================
+[DB] Connection closed
+[11:30:04] [DISPATCHER] Database connection closed
+[11:35:00] [DISPATCHER] ============================================================
+[11:35:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[11:35:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[11:35:01] [DISPATCHER] Database connection established
+[11:35:01] [DISPATCHER] Starting multi-account alert dispatcher
+[11:35:03] [DISPATCHER] ✅ SMTP connection authenticated
+[11:35:04] [DISPATCHER] [ACCOUNT: seo6@cubehq.ai] Found 3 pending alerts for 1 recipients
+[11:35:06] [DISPATCHER] [ACCOUNT: seo6@cubehq.ai] ✅ Alert sent for sc-domain:drinkkickback.com
+[11:35:09] [DISPATCHER] [ACCOUNT: seo6@cubehq.ai] ✅ Alert sent for https://greenriverwhiskey.com/
+[11:35:12] [DISPATCHER] [ACCOUNT: seo6@cubehq.ai] ✅ Alert sent for sc-domain:happybeing.co
+[11:35:14] [DISPATCHER] SMTP connection closed
+[11:35:14] [DISPATCHER] Dispatcher finished: 3 sent, 0 failed
+[11:35:14] [DISPATCHER] ============================================================
+[11:35:14] [DISPATCHER] Summary: 3 sent, 0 failed
+[11:35:14] [DISPATCHER] ============================================================
+[DB] Connection closed
+[11:35:14] [DISPATCHER] Database connection closed
+[11:40:00] [DISPATCHER] ============================================================
+[11:40:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[11:40:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[11:40:01] [DISPATCHER] Database connection established
+[11:40:01] [DISPATCHER] Starting multi-account alert dispatcher
+[11:40:07] [DISPATCHER] ✅ SMTP connection authenticated
+[11:40:08] [DISPATCHER] SMTP connection closed
+[11:40:08] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[11:40:08] [DISPATCHER] ============================================================
+[11:40:08] [DISPATCHER] Summary: 0 sent, 0 failed
+[11:40:08] [DISPATCHER] ============================================================
+[DB] Connection closed
+[11:40:08] [DISPATCHER] Database connection closed
+[11:45:00] [DISPATCHER] ============================================================
+[11:45:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[11:45:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[11:45:01] [DISPATCHER] Database connection established
+[11:45:01] [DISPATCHER] Starting multi-account alert dispatcher
+[11:45:05] [DISPATCHER] ✅ SMTP connection authenticated
+[11:45:06] [DISPATCHER] SMTP connection closed
+[11:45:06] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[11:45:06] [DISPATCHER] ============================================================
+[11:45:06] [DISPATCHER] Summary: 0 sent, 0 failed
+[11:45:06] [DISPATCHER] ============================================================
+[DB] Connection closed
+[11:45:06] [DISPATCHER] Database connection closed
+[11:50:00] [DISPATCHER] ============================================================
+[11:50:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[11:50:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[11:50:01] [DISPATCHER] Database connection established
+[11:50:01] [DISPATCHER] Starting multi-account alert dispatcher
+[11:50:03] [DISPATCHER] ✅ SMTP connection authenticated
+[11:50:03] [DISPATCHER] SMTP connection closed
+[11:50:03] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[11:50:03] [DISPATCHER] ============================================================
+[11:50:03] [DISPATCHER] Summary: 0 sent, 0 failed
+[11:50:03] [DISPATCHER] ============================================================
+[DB] Connection closed
+[11:50:03] [DISPATCHER] Database connection closed
+[11:55:01] [DISPATCHER] ============================================================
+[11:55:01] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[11:55:01] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[11:55:02] [DISPATCHER] Database connection established
+[11:55:02] [DISPATCHER] Starting multi-account alert dispatcher
+[11:55:32] [DISPATCHER] ❌ Fatal SMTP error: timed out
+[11:55:32] [DISPATCHER] ============================================================
+[11:55:32] [DISPATCHER] Summary: 0 sent, 1 failed
+[11:55:32] [DISPATCHER] ============================================================
+[DB] Connection closed
+[11:55:32] [DISPATCHER] Database connection closed
+[12:00:01] [DISPATCHER] ============================================================
+[12:00:01] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:00:01] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:00:02] [DISPATCHER] Database connection established
+[12:00:02] [DISPATCHER] Starting multi-account alert dispatcher
+[12:00:04] [DISPATCHER] ✅ SMTP connection authenticated
+[12:00:04] [DISPATCHER] SMTP connection closed
+[12:00:04] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[12:00:04] [DISPATCHER] ============================================================
+[12:00:04] [DISPATCHER] Summary: 0 sent, 0 failed
+[12:00:04] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:00:04] [DISPATCHER] Database connection closed
+[12:05:00] [DISPATCHER] ============================================================
+[12:05:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:05:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:05:02] [DISPATCHER] Database connection established
+[12:05:02] [DISPATCHER] Starting multi-account alert dispatcher
+[12:05:32] [DISPATCHER] ❌ Fatal SMTP error: timed out
+[12:05:32] [DISPATCHER] ============================================================
+[12:05:32] [DISPATCHER] Summary: 0 sent, 1 failed
+[12:05:32] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:05:32] [DISPATCHER] Database connection closed
+[12:10:00] [DISPATCHER] ============================================================
+[12:10:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:10:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:10:01] [DISPATCHER] Database connection established
+[12:10:01] [DISPATCHER] Starting multi-account alert dispatcher
+[12:10:32] [DISPATCHER] ❌ Fatal SMTP error: timed out
+[12:10:32] [DISPATCHER] ============================================================
+[12:10:32] [DISPATCHER] Summary: 0 sent, 1 failed
+[12:10:32] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:10:32] [DISPATCHER] Database connection closed
+[12:15:00] [DISPATCHER] ============================================================
+[12:15:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:15:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:15:01] [DISPATCHER] Database connection established
+[12:15:01] [DISPATCHER] Starting multi-account alert dispatcher
+[12:15:32] [DISPATCHER] ❌ Fatal SMTP error: timed out
+[12:15:32] [DISPATCHER] ============================================================
+[12:15:32] [DISPATCHER] Summary: 0 sent, 1 failed
+[12:15:32] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:15:32] [DISPATCHER] Database connection closed
+[12:20:00] [DISPATCHER] ============================================================
+[12:20:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:20:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:20:02] [DISPATCHER] Database connection established
+[12:20:02] [DISPATCHER] Starting multi-account alert dispatcher
+[12:20:32] [DISPATCHER] ❌ Fatal SMTP error: timed out
+[12:20:32] [DISPATCHER] ============================================================
+[12:20:32] [DISPATCHER] Summary: 0 sent, 1 failed
+[12:20:32] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:20:32] [DISPATCHER] Database connection closed
+[12:25:00] [DISPATCHER] ============================================================
+[12:25:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:25:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:25:01] [DISPATCHER] Database connection established
+[12:25:01] [DISPATCHER] Starting multi-account alert dispatcher
+[12:25:32] [DISPATCHER] ❌ Fatal SMTP error: timed out
+[12:25:32] [DISPATCHER] ============================================================
+[12:25:32] [DISPATCHER] Summary: 0 sent, 1 failed
+[12:25:32] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:25:32] [DISPATCHER] Database connection closed
+[12:30:00] [DISPATCHER] ============================================================
+[12:30:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:30:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:30:01] [DISPATCHER] Database connection established
+[12:30:01] [DISPATCHER] Starting multi-account alert dispatcher
+[12:30:31] [DISPATCHER] ❌ Fatal SMTP error: timed out
+[12:30:31] [DISPATCHER] ============================================================
+[12:30:31] [DISPATCHER] Summary: 0 sent, 1 failed
+[12:30:31] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:30:31] [DISPATCHER] Database connection closed
+[12:35:00] [DISPATCHER] ============================================================
+[12:35:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:35:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:35:01] [DISPATCHER] Database connection established
+[12:35:01] [DISPATCHER] Starting multi-account alert dispatcher
+[12:35:31] [DISPATCHER] ❌ Fatal SMTP error: timed out
+[12:35:31] [DISPATCHER] ============================================================
+[12:35:31] [DISPATCHER] Summary: 0 sent, 1 failed
+[12:35:31] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:35:31] [DISPATCHER] Database connection closed
+[12:40:00] [DISPATCHER] ============================================================
+[12:40:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:40:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:40:01] [DISPATCHER] Database connection established
+[12:40:01] [DISPATCHER] Starting multi-account alert dispatcher
+[12:40:04] [DISPATCHER] ✅ SMTP connection authenticated
+[12:40:04] [DISPATCHER] SMTP connection closed
+[12:40:04] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[12:40:04] [DISPATCHER] ============================================================
+[12:40:04] [DISPATCHER] Summary: 0 sent, 0 failed
+[12:40:04] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:40:04] [DISPATCHER] Database connection closed
+[12:45:00] [DISPATCHER] ============================================================
+[12:45:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:45:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:45:01] [DISPATCHER] Database connection established
+[12:45:01] [DISPATCHER] Starting multi-account alert dispatcher
+[12:45:31] [DISPATCHER] ❌ Fatal SMTP error: timed out
+[12:45:31] [DISPATCHER] ============================================================
+[12:45:31] [DISPATCHER] Summary: 0 sent, 1 failed
+[12:45:31] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:45:31] [DISPATCHER] Database connection closed
+[12:50:00] [DISPATCHER] ============================================================
+[12:50:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:50:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:50:01] [DISPATCHER] Database connection established
+[12:50:01] [DISPATCHER] Starting multi-account alert dispatcher
+[12:50:03] [DISPATCHER] ✅ SMTP connection authenticated
+[12:50:03] [DISPATCHER] SMTP connection closed
+[12:50:03] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[12:50:03] [DISPATCHER] ============================================================
+[12:50:03] [DISPATCHER] Summary: 0 sent, 0 failed
+[12:50:03] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:50:03] [DISPATCHER] Database connection closed
+[12:55:00] [DISPATCHER] ============================================================
+[12:55:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[12:55:00] [DISPATCHER] ============================================================
+[DB] Connecting to Supabase...
+[DB] ✓ Connected successfully
+[12:55:01] [DISPATCHER] Database connection established
+[12:55:01] [DISPATCHER] Starting multi-account alert dispatcher
+[12:55:03] [DISPATCHER] ✅ SMTP connection authenticated
+[12:55:03] [DISPATCHER] SMTP connection closed
+[12:55:03] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[12:55:03] [DISPATCHER] ============================================================
+[12:55:03] [DISPATCHER] Summary: 0 sent, 0 failed
+[12:55:03] [DISPATCHER] ============================================================
+[DB] Connection closed
+[12:55:03] [DISPATCHER] Database connection closed

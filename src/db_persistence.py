@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 import json
 from auth.token_model import GSCAuthToken
-from config.date_windows import REQUIRED_HISTORY_DAYS, GSC_LAG_DAYS, ANALYSIS_WINDOW_DAYS
+from config.date_windows import GSC_LAG_DAYS, ANALYSIS_WINDOW_DAYS, INGESTION_WINDOW_DAYS
 
 # Load environment variables
 load_dotenv()
@@ -246,34 +246,28 @@ class DatabasePersistence:
     
     def check_needs_backfill(self, account_id: str, property_id: str) -> bool:
         """
-        Check if a property has at least the required days of data in all 3 metric tables.
-        Checks property_daily_metrics, page_daily_metrics, and device_daily_metrics.
-        Validates only within the window relevant to analysis (Total window - GSC lag).
+        Check if a property has at least 14 days of data in all 3 metric tables.
+        Validates precisely against the canonical ANALYSIS_WINDOW_DAYS.
         
         Args:
-            account_id: UUID of the account (for safety)
+            account_id: UUID of the account
             property_id: UUID of the property
             
         Returns:
-            True if backfill is needed (if any table is missing data), False otherwise
+            True if backfill is needed, False otherwise
         """
         if not self.connection or not self.cursor:
             raise RuntimeError("Database connection not established")
 
         try:
-            # We check the window [Analysis Days + Buffer] to see if it's already full.
-            # If any table has < REQUIRED_HISTORY_DAYS distinct dates in that window, we backfill.
-            # The window starts from 'yesterday' minus (required + buffer) to today minus lag.
-            
             tables_to_check = [
                 'property_daily_metrics',
                 'page_daily_metrics',
                 'device_daily_metrics'
             ]
             
-            # Use INTERVAL '16 days' as a base check window (14 required + 2 lag)
-            # This aligns precisely with what Main.py should be ingesting normally.
-            check_interval = REQUIRED_HISTORY_DAYS + GSC_LAG_DAYS
+            # Canonical check window (16 days = 14 analysis + 2 lag)
+            check_interval = INGESTION_WINDOW_DAYS
             
             for table in tables_to_check:
                 query = f"""
@@ -290,11 +284,11 @@ class DatabasePersistence:
                 result = self.cursor.fetchone()
                 count = result['date_count'] if result else 0
                 
-                if count < REQUIRED_HISTORY_DAYS:
-                    print(f"[BACKFILL CHECK] {table} incomplete: found {count}/{REQUIRED_HISTORY_DAYS} days for property {property_id}")
+                if count < ANALYSIS_WINDOW_DAYS:
+                    print(f"[BACKFILL CHECK] {table} incomplete: found {count}/{ANALYSIS_WINDOW_DAYS} days for property {property_id}")
                     return True
             
-            print(f"[BACKFILL CHECK] Property {property_id} has sufficient data in all tables.")
+            print(f"[BACKFILL CHECK] Property {property_id} has sufficient data ({ANALYSIS_WINDOW_DAYS} days) in all tables.")
             return False
             
         except psycopg2.Error as e:
@@ -302,7 +296,6 @@ class DatabasePersistence:
             raise RuntimeError(f"Database error checking backfill needs: {e}") from e
         except Exception as e:
             print(f"[ERROR] Failed to check backfill status for {property_id}: {e}")
-            # Err on the side of caution (don't backfill if check fails, to avoid loops)
             return False
 
     def insert_website(self, account_id: str, base_domain: str) -> Optional[str]:
@@ -639,8 +632,8 @@ class DatabasePersistence:
         Fetch page impressions for V1 visibility analysis.
         Only fetches: page_url, date, impressions
         
-        Uses MAX(date) - 13 days to handle GSC lag correctly,
-        ensuring we always get complete 14-day windows.
+        Uses MAX(date) lookback logic to handle GSC lag correctly,
+    ensuring we always get complete analysis windows.
         
         Args:
             account_id: UUID of the account
@@ -765,7 +758,7 @@ class DatabasePersistence:
     def fetch_device_metrics_for_analysis(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
         """
         Fetch metrics required for device visibility analysis.
-        Uses canonical ANALYSIS_WINDOW_DAYS + GSC_LAG_DAYS to ensure full coverage.
+        Uses canonical ANALYSIS_WINDOW_DAYS anchored to MAX(date).
         
         Args:
             account_id: UUID of the account
@@ -778,10 +771,9 @@ class DatabasePersistence:
             raise RuntimeError("Database connection not established")
         
         try:
-            # We need ANALYSIS_WINDOW_DAYS of data.
-            # Since GSC has a lag, we fetch (ANALYSIS_WINDOW_DAYS + GSC_LAG_DAYS)
-            # to be absolutely sure we get the full requested window.
-            lookback_interval = ANALYSIS_WINDOW_DAYS + GSC_LAG_DAYS
+            # We need precisely ANALYSIS_WINDOW_DAYS of historical data.
+            # To handle GSC lag, we anchor the window to the latest available date.
+            lookback_days = ANALYSIS_WINDOW_DAYS - 1
             
             self.cursor.execute(f"""
                 SELECT 
@@ -795,9 +787,13 @@ class DatabasePersistence:
                 JOIN properties p ON m.property_id = p.id
                 WHERE m.property_id = %s
                   AND p.account_id = %s
-                  AND m.date >= CURRENT_DATE - INTERVAL '%s days'
+                  AND m.date >= (
+                      SELECT MAX(date) - INTERVAL '%s days'
+                      FROM device_daily_metrics
+                      WHERE property_id = %s
+                  )
                 ORDER BY m.date DESC, m.device
-            """, (property_id, account_id, lookback_interval))
+            """, (property_id, account_id, lookback_days, property_id))
             
             metrics = self.cursor.fetchall()
             return [dict(row) for row in metrics]
@@ -1044,7 +1040,7 @@ class DatabasePersistence:
 
     def fetch_property_daily_metrics_for_overview(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
         """
-        Fetch last 14 days of property metrics. Strictly checked for account ownership.
+        Fetch precisely ANALYSIS_WINDOW_DAYS of property metrics anchored to MAX(date).
         
         Args:
             account_id: UUID of the account
@@ -1057,7 +1053,9 @@ class DatabasePersistence:
             raise RuntimeError("Database connection not established")
         
         try:
-            self.cursor.execute("""
+            lookback_days = ANALYSIS_WINDOW_DAYS - 1
+            
+            self.cursor.execute(f"""
                 SELECT 
                     m.date,
                     m.clicks,
@@ -1067,9 +1065,13 @@ class DatabasePersistence:
                 FROM property_daily_metrics m
                 JOIN properties p ON m.property_id = p.id
                 WHERE m.property_id = %s AND p.account_id = %s
+                  AND m.date >= (
+                      SELECT MAX(date) - INTERVAL '%s days'
+                      FROM property_daily_metrics
+                      WHERE property_id = %s
+                  )
                 ORDER BY m.date DESC
-                LIMIT 14
-            """, (property_id, account_id))
+            """, (property_id, account_id, lookback_days, property_id))
             
             metrics = self.cursor.fetchall()
             return [dict(row) for row in metrics]

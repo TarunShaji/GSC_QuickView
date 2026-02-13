@@ -12,6 +12,7 @@ Logic:
 
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 
 
 def log_alert(message: str):
@@ -41,34 +42,28 @@ def compute_7v7_comparison(account_id: str, property_id: str, db) -> Optional[Di
     # Get property URL for logging
     site_url = db.fetch_property_url(property_id)
     
-    # Compute 7v7 comparison (same logic as api.py)
-    today = datetime.now().date()
-    
-    last_7 = {"impressions": 0, "days": 0}
-    prev_7 = {"impressions": 0, "days": 0}
-    
-    for row in metrics:
-        row_date = row['date']
-        days_ago = (today - row_date).days
+    # Compute 7v7 comparison using canonical slicing
+    # Metrics are already sorted DESC from db_persistence.py
+    if len(metrics) < ANALYSIS_WINDOW_DAYS:
+        return None
         
-        if 1 <= days_ago <= 7:
-            last_7["impressions"] += row['impressions'] or 0
-            last_7["days"] += 1
-        elif 8 <= days_ago <= 14:
-            prev_7["impressions"] += row['impressions'] or 0
-            prev_7["days"] += 1
+    last_7_rows = metrics[:HALF_ANALYSIS_WINDOW]
+    prev_7_rows = metrics[HALF_ANALYSIS_WINDOW:ANALYSIS_WINDOW_DAYS]
+    
+    last_7_impressions = sum(row['impressions'] or 0 for row in last_7_rows)
+    prev_7_impressions = sum(row['impressions'] or 0 for row in prev_7_rows)
     
     # Calculate delta percentage
-    if prev_7["impressions"] > 0:
-        delta_pct = ((last_7["impressions"] - prev_7["impressions"]) / prev_7["impressions"]) * 100
+    if prev_7_impressions > 0:
+        delta_pct = ((last_7_impressions - prev_7_impressions) / prev_7_impressions) * 100
     else:
         delta_pct = 0
     
     return {
         "property_id": property_id,
         "site_url": site_url,
-        "prev_7_impressions": prev_7["impressions"],
-        "last_7_impressions": last_7["impressions"],
+        "prev_7_impressions": prev_7_impressions,
+        "last_7_impressions": last_7_impressions,
         "delta_pct": round(delta_pct, 1)
     }
 

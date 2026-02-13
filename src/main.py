@@ -13,7 +13,7 @@ from device_metrics_daily_ingestor import DeviceMetricsDailyIngestor
 from page_visibility_analyzer import PageVisibilityAnalyzer
 from device_visibility_analyzer import DeviceVisibilityAnalyzer
 from datetime import datetime, timedelta
-from config.date_windows import GSC_LAG_DAYS, BACKFILL_RANGE_DAYS, DAILY_INGEST_DAYS
+from config.date_windows import GSC_LAG_DAYS, INGESTION_WINDOW_DAYS, DAILY_INGEST_DAYS
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, List, Dict, Any
 
@@ -103,7 +103,7 @@ def run_pipeline(account_id: str):
         daily_start = daily_end - timedelta(days=DAILY_INGEST_DAYS - 1)
         
         # Backfill covers the stabilization lag + the required historical buffer
-        backfill_start = today - timedelta(days=BACKFILL_RANGE_DAYS + GSC_LAG_DAYS)
+        backfill_start = today - timedelta(days=INGESTION_WINDOW_DAYS)
         backfill_end = daily_end
         
         db.update_pipeline_state(

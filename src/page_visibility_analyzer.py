@@ -20,6 +20,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Set, Tuple
 from db_persistence import DatabasePersistence
+from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 
 
 class PageVisibilityAnalyzer:
@@ -57,8 +58,8 @@ class PageVisibilityAnalyzer:
         # Calculate date boundaries
         most_recent_date = max(row['date'] for row in rows)
         
-        # Windows: 7 days each
-        window_size = 7
+        # Windows: derived from canonical ANALYSIS_WINDOW_DAYS
+        window_size = HALF_ANALYSIS_WINDOW
         
         # Last window: most_recent_date - 6 to most_recent_date
         last_7_start = most_recent_date - timedelta(days=window_size - 1)
@@ -136,10 +137,11 @@ class PageVisibilityAnalyzer:
         Returns:
             Tuple of (gains, drops) - lists of page dicts
         """
-        # Calculate date boundaries
-        last_7_start = most_recent_date - timedelta(days=6)
-        prev_7_start = most_recent_date - timedelta(days=13)
-        prev_7_end = most_recent_date - timedelta(days=7)
+        # Calculate date boundaries using canonical constants
+        window_size = HALF_ANALYSIS_WINDOW
+        last_7_start = most_recent_date - timedelta(days=window_size - 1)
+        prev_7_start = most_recent_date - timedelta(days=ANALYSIS_WINDOW_DAYS - 1)
+        prev_7_end = most_recent_date - timedelta(days=window_size)
         
         gains = []
         drops = []
@@ -191,17 +193,16 @@ class PageVisibilityAnalyzer:
         # Fetch page metrics for analysis (impressions only)
         rows = self.fetch_analysis_metrics(account_id, property_id)
         
-        if not rows:
-            print(f"  [WARNING] No page metrics data available")
+        # Safety validation
+        if not rows or len(set(row['date'] for row in rows)) < ANALYSIS_WINDOW_DAYS:
+            print(f"  [WARNING] Insufficient data: only {len(set(row['date'] for row in rows))} days available (need {ANALYSIS_WINDOW_DAYS})")
             return {
                 'property_id': property_id,
-                'site_url': site_url,
-                'base_domain': base_domain,
-                'insufficient_data': True,
                 'new_pages': [],
                 'lost_pages': [],
                 'gains': [],
-                'drops': []
+                'drops': [],
+                'insufficient_data': True
             }
         
         print(f"  [DATA] Retrieved {len(rows):,} page-date rows for last 14 days")
