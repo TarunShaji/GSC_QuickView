@@ -74,6 +74,10 @@ export interface PageVisibilityItem {
     impressions_prev_7: number;
     delta: number;
     delta_pct: number;
+    clicks_last_7: number;
+    clicks_prev_7: number;
+    clicks_delta: number;
+    clicks_delta_pct: number;
 }
 
 export interface PageVisibilityResponse {

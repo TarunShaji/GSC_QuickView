@@ -244,10 +244,10 @@ export default function PropertyDashboard() {
                         <h2 className="text-lg font-semibold text-white">Page Movements</h2>
                         <div className="flex bg-slate-950/40 rounded-lg p-1 border border-slate-800/40 w-fit overflow-x-auto">
                             {[
-                                { id: 'drop', label: 'Dropping' },
-                                { id: 'gain', label: 'Gaining' },
-                                { id: 'new', label: 'New' },
-                                { id: 'lost', label: 'Lost' }
+                                { id: 'drop', label: 'Declining Pages' },
+                                { id: 'gain', label: 'Rising Pages' },
+                                { id: 'new', label: 'Emerged Pages' },
+                                { id: 'lost', label: 'Lost Pages' }
                             ].map((tab) => (
                                 <button
                                     key={tab.id}
@@ -273,24 +273,42 @@ export default function PropertyDashboard() {
                         <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
                             {pages.pages[activeTab].length > 0 ? (
                                 <table className="w-full text-sm">
-                                    <tbody className="divide-y divide-slate-800/10">
+                                    <thead>
+                                        <tr className="text-slate-500 border-b border-slate-700/30">
+                                            <th className="px-5 py-3 text-left font-semibold">Page URL</th>
+                                            <th className="px-5 py-3 text-right font-semibold">Impressions</th>
+                                            <th className="px-5 py-3 text-right font-semibold">Clicks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800/20">
                                         {pages.pages[activeTab].map((item: PageVisibilityItem, i: number) => (
-                                            <tr key={i} className="hover:bg-slate-800/10 transition-colors group">
+                                            <tr key={i} className="hover:bg-slate-800/10 transition-colors group align-top">
                                                 <td className="px-5 py-4 max-w-[400px]">
                                                     <div className="truncate text-slate-400 group-hover:text-slate-200 transition-colors font-medium" title={item.page_url}>
                                                         {item.page_url.replace(/^https?:\/\/[^/]+/, '') || '/'}
                                                     </div>
                                                 </td>
                                                 <td className="px-5 py-4 text-right">
-                                                    {activeTab === 'new' ? (
-                                                        <span className="text-emerald-400 font-bold">{item.impressions_last_7.toLocaleString()} imps</span>
-                                                    ) : activeTab === 'lost' ? (
-                                                        <span className="text-rose-500/80 font-bold">0 impressions</span>
-                                                    ) : (
-                                                        <span className={`font-bold ${activeTab === 'gain' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                                    <div className="text-white font-semibold">
+                                                        {item.impressions_last_7.toLocaleString()}
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 mt-1">
+                                                        {item.impressions_prev_7.toLocaleString()}
+                                                        <span className="ml-2">
                                                             {formatDelta(item.delta_pct)}
                                                         </span>
-                                                    )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-4 text-right">
+                                                    <div className="text-white font-semibold">
+                                                        {item.clicks_last_7.toLocaleString()}
+                                                    </div>
+                                                    <div className="text-xs text-slate-500 mt-1">
+                                                        {item.clicks_prev_7.toLocaleString()}
+                                                        <span className="ml-2">
+                                                            {formatDelta(item.clicks_delta_pct)}
+                                                        </span>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
