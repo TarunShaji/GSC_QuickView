@@ -674,18 +674,21 @@ class DatabasePersistence:
                 SELECT 
                     m.page_url,
                     m.date,
-                    m.impressions
+                    m.impressions,
+                    m.clicks
                 FROM page_daily_metrics m
                 JOIN properties p ON m.property_id = p.id
                 WHERE m.property_id = %s
                   AND p.account_id = %s
                   AND m.date >= (
-                      SELECT MAX(date) - INTERVAL '13 days'
-                      FROM page_daily_metrics
-                      WHERE property_id = %s
+                      SELECT MAX(m2.date) - INTERVAL '13 days'
+                      FROM page_daily_metrics m2
+                      JOIN properties p2 ON m2.property_id = p2.id
+                      WHERE m2.property_id = %s
+                        AND p2.account_id = %s
                   )
                 ORDER BY m.date DESC, m.page_url
-            """, (property_id, account_id, property_id))
+            """, (property_id, account_id, property_id, account_id))
             
             metrics = self.cursor.fetchall()
             return [dict(metric) for metric in metrics]
@@ -850,7 +853,7 @@ class DatabasePersistence:
         Returns:
             Total number of rows inserted
         
-        V1 Schema (7 data columns):
+        V1 Schema (11 data columns):
             - property_id (uuid)
             - category (text): 'new' | 'lost' | 'drop' | 'gain'
             - page_url (text)
@@ -858,6 +861,10 @@ class DatabasePersistence:
             - impressions_prev_7 (int4)
             - delta (int4)
             - delta_pct (numeric)
+            - clicks_last_7 (int4)
+            - clicks_prev_7 (int4)
+            - clicks_delta (int4)
+            - clicks_delta_pct (numeric)
             - created_at (timestamptz)
         """
         if not self.connection or not self.cursor:
@@ -891,7 +898,11 @@ class DatabasePersistence:
                         page['impressions_last_7'],
                         page['impressions_prev_7'],
                         page['delta'],
-                        page['delta_pct']
+                        page['delta_pct'],
+                        page['clicks_last_7'],
+                        page['clicks_prev_7'],
+                        page['clicks_delta'],
+                        page['clicks_delta_pct']
                     ))
             
             # Batch insert
@@ -901,8 +912,10 @@ class DatabasePersistence:
                     """
                     INSERT INTO page_visibility_analysis 
                         (property_id, category, page_url, impressions_last_7,
-                         impressions_prev_7, delta, delta_pct, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                         impressions_prev_7, delta, delta_pct, 
+                         clicks_last_7, clicks_prev_7, clicks_delta, clicks_delta_pct,
+                         created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     """,
                     rows_to_insert,
                     page_size=100
@@ -1137,7 +1150,8 @@ class DatabasePersistence:
             self.cursor.execute("""
                 SELECT 
                     v.category, v.page_url, v.impressions_last_7,
-                    v.impressions_prev_7, v.delta, v.delta_pct
+                    v.impressions_prev_7, v.delta, v.delta_pct,
+                    v.clicks_last_7, v.clicks_prev_7, v.clicks_delta, v.clicks_delta_pct
                 FROM page_visibility_analysis v
                 JOIN properties p ON v.property_id = p.id
                 WHERE v.property_id = %s AND p.account_id = %s

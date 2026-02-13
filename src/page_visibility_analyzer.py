@@ -102,10 +102,10 @@ class PageVisibilityAnalyzer:
             'continuing_pages': P_last & P_prev  # In both
         }
     
-    def aggregate_page_impressions(self, rows: List[Dict[str, Any]], page_url: str, 
-                                   start_date: datetime.date, end_date: datetime.date) -> int:
+    def aggregate_page_metrics(self, rows: List[Dict[str, Any]], page_url: str, 
+                              start_date: datetime.date, end_date: datetime.date) -> Dict[str, int]:
         """
-        Aggregate impressions for a single page over a date range
+        Aggregate metrics for a single page over a date range
         
         Args:
             rows: All page-date rows
@@ -114,20 +114,26 @@ class PageVisibilityAnalyzer:
             end_date: End of range (inclusive)
         
         Returns:
-            Total impressions
+            Dict with 'impressions' and 'clicks'
         """
         matching_rows = [
             row for row in rows
             if row['page_url'] == page_url and start_date <= row['date'] <= end_date
         ]
         
-        return sum(row['impressions'] for row in matching_rows)
+        impressions = sum(row.get('impressions', 0) or 0 for row in matching_rows)
+        clicks = sum(row.get('clicks', 0) or 0 for row in matching_rows)
+        
+        return {
+            'impressions': impressions,
+            'clicks': clicks
+        }
     
     def compute_page_deltas(self, rows: List[Dict[str, Any]], continuing_pages: Set[str],
                            most_recent_date: datetime.date) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
-        Compute impression deltas for continuing pages
-        Only returns gains (>=40%) and drops (<=-40%)
+        Compute metric deltas for continuing pages
+        Only returns gains (>=40% impressions) and drops (<=-40% impressions)
         
         Args:
             rows: All page-date rows
@@ -135,7 +141,7 @@ class PageVisibilityAnalyzer:
             most_recent_date: Most recent date in dataset
         
         Returns:
-            Tuple of (gains, drops) - lists of page dicts
+            Tuple of (rising, declining) - lists of page dicts
         """
         # Calculate date boundaries using canonical constants
         window_size = HALF_ANALYSIS_WINDOW
@@ -143,34 +149,47 @@ class PageVisibilityAnalyzer:
         prev_7_start = most_recent_date - timedelta(days=ANALYSIS_WINDOW_DAYS - 1)
         prev_7_end = most_recent_date - timedelta(days=window_size)
         
-        gains = []
-        drops = []
+        rising = []
+        declining = []
         
         for page_url in continuing_pages:
-            # Aggregate impressions for both windows
-            impressions_last_7 = self.aggregate_page_impressions(rows, page_url, last_7_start, most_recent_date)
-            impressions_prev_7 = self.aggregate_page_impressions(rows, page_url, prev_7_start, prev_7_end)
+            # Aggregate metrics for both windows
+            last_metrics = self.aggregate_page_metrics(rows, page_url, last_7_start, most_recent_date)
+            prev_metrics = self.aggregate_page_metrics(rows, page_url, prev_7_start, prev_7_end)
             
-            # Compute delta
-            delta = impressions_last_7 - impressions_prev_7
-            delta_pct = (delta / impressions_prev_7 * 100) if impressions_prev_7 > 0 else 0.0
+            imps_last = last_metrics['impressions']
+            imps_prev = prev_metrics['impressions']
+            clicks_last = last_metrics['clicks']
+            clicks_prev = prev_metrics['clicks']
+            
+            # Compute impression delta
+            delta = imps_last - imps_prev
+            delta_pct = (delta / imps_prev * 100) if imps_prev > 0 else 0.0
+            
+            # Compute clicks delta
+            clicks_delta = clicks_last - clicks_prev
+            clicks_delta_pct = (clicks_delta / clicks_prev * 100) if clicks_prev > 0 else 0.0
             
             # Classify: only persist significant changes
             page_dict = {
                 'page_url': page_url,
-                'impressions_last_7': impressions_last_7,
-                'impressions_prev_7': impressions_prev_7,
+                'impressions_last_7': imps_last,
+                'impressions_prev_7': imps_prev,
                 'delta': delta,
-                'delta_pct': round(delta_pct, 1)
+                'delta_pct': round(delta_pct, 1),
+                'clicks_last_7': clicks_last,
+                'clicks_prev_7': clicks_prev,
+                'clicks_delta': clicks_delta,
+                'clicks_delta_pct': round(clicks_delta_pct, 1)
             }
             
             if delta_pct >= 40:
-                gains.append(page_dict)
+                rising.append(page_dict)
             elif delta_pct <= -40:
-                drops.append(page_dict)
+                declining.append(page_dict)
             # else: flat page, ignore (do not persist)
         
-        return (gains, drops)
+        return (rising, declining)
     
     def analyze_property(self, account_id: str, property_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -238,24 +257,32 @@ class PageVisibilityAnalyzer:
         
         new_pages = []
         for page_url in new_pages_set:
-            impressions = self.aggregate_page_impressions(rows, page_url, last_7_start, most_recent_date)
+            metrics = self.aggregate_page_metrics(rows, page_url, last_7_start, most_recent_date)
             new_pages.append({
                 'page_url': page_url,
-                'impressions_last_7': impressions,
+                'impressions_last_7': metrics['impressions'],
                 'impressions_prev_7': 0,
-                'delta': impressions,
-                'delta_pct': 0.0
+                'delta': metrics['impressions'],
+                'delta_pct': 100.0,
+                'clicks_last_7': metrics['clicks'],
+                'clicks_prev_7': 0,
+                'clicks_delta': metrics['clicks'],
+                'clicks_delta_pct': 100.0
             })
         
         lost_pages = []
         for page_url in lost_pages_set:
-            impressions = self.aggregate_page_impressions(rows, page_url, prev_7_start, prev_7_end)
+            metrics = self.aggregate_page_metrics(rows, page_url, prev_7_start, prev_7_end)
             lost_pages.append({
                 'page_url': page_url,
                 'impressions_last_7': 0,
-                'impressions_prev_7': impressions,
-                'delta': -impressions,
-                'delta_pct': -100.0
+                'impressions_prev_7': metrics['impressions'],
+                'delta': -metrics['impressions'],
+                'delta_pct': -100.0,
+                'clicks_last_7': 0,
+                'clicks_prev_7': metrics['clicks'],
+                'clicks_delta': -metrics['clicks'],
+                'clicks_delta_pct': -100.0
             })
         
         # Sort by impressions (descending)
