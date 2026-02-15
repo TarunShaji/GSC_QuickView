@@ -579,6 +579,34 @@ class DatabasePersistence:
         except psycopg2.Error as e:
             print(f"[ERROR] Failed to fetch properties for account {account_id}: {e}")
             raise RuntimeError(f"Database error fetching properties: {e}") from e
+
+    def fetch_property_by_id(self, account_id: str, property_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch a single property with base_domain for analyzer usage.
+        Strictly account scoped.
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                SELECT 
+                    p.id,
+                    p.site_url,
+                    p.property_type,
+                    p.permission_level,
+                    w.base_domain
+                FROM properties p
+                JOIN websites w ON p.website_id = w.id
+                WHERE p.id = %s AND p.account_id = %s
+            """, (property_id, account_id))
+
+            row = self.cursor.fetchone()
+            return dict(row) if row else None
+
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch property {property_id} for account {account_id}: {e}")
+            raise RuntimeError(f"Database error fetching property: {e}") from e
     
     # ========================================
     # PHASE 5: PAGE METRICS PERSISTENCE
@@ -835,182 +863,9 @@ class DatabasePersistence:
             raise RuntimeError(f"Database error fetching device metrics: {e}") from e
 
 
-    def persist_page_visibility_analysis(self, property_id: str, analysis_results: dict) -> int:
-        """
-        Persist page visibility analysis to page_visibility_analysis table (V1).
-        
-        Strategy:
-        - Delete existing records for property_id (idempotent)
-        - Batch insert new records
-        - Return count of inserted rows
-        
-        Args:
-            property_id: UUID of the property
-            analysis_results: Dictionary with keys: 'new_pages', 'lost_pages', 
-                            'gains', 'drops'
-                            Each value is a list of page dicts
-        
-        Returns:
-            Total number of rows inserted
-        
-        V1 Schema (11 data columns):
-            - property_id (uuid)
-            - category (text): 'new' | 'lost' | 'drop' | 'gain'
-            - page_url (text)
-            - impressions_last_7 (int4)
-            - impressions_prev_7 (int4)
-            - delta (int4)
-            - delta_pct (numeric)
-            - clicks_last_7 (int4)
-            - clicks_prev_7 (int4)
-            - clicks_delta (int4)
-            - clicks_delta_pct (numeric)
-            - created_at (timestamptz)
-        """
-        if not self.connection or not self.cursor:
-            raise RuntimeError("Database connection not established")
-        
-        try:
-            # Delete existing records for this property (idempotent)
-            self.cursor.execute("""
-                DELETE FROM page_visibility_analysis
-                WHERE property_id = %s
-            """, (property_id,))
-            
-            # Prepare batch insert data
-            rows_to_insert = []
-            
-            # Process each category
-            category_mapping = {
-                'new_pages': 'new',
-                'lost_pages': 'lost',
-                'drops': 'drop',
-                'gains': 'gain'
-            }
-            
-            for result_key, category in category_mapping.items():
-                pages = analysis_results.get(result_key, [])
-                for page in pages:
-                    rows_to_insert.append((
-                        property_id,
-                        category,
-                        page['page_url'],
-                        page['impressions_last_7'],
-                        page['impressions_prev_7'],
-                        page['delta'],
-                        page['delta_pct'],
-                        page['clicks_last_7'],
-                        page['clicks_prev_7'],
-                        page['clicks_delta'],
-                        page['clicks_delta_pct']
-                    ))
-            
-            # Batch insert
-            if rows_to_insert:
-                execute_batch(
-                    self.cursor,
-                    """
-                    INSERT INTO page_visibility_analysis 
-                        (property_id, category, page_url, impressions_last_7,
-                         impressions_prev_7, delta, delta_pct, 
-                         clicks_last_7, clicks_prev_7, clicks_delta, clicks_delta_pct,
-                         created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                    """,
-                    rows_to_insert,
-                    page_size=100
-                )
-            
-            self.connection.commit()
-            
-            print(f"✓ Persisted {len(rows_to_insert)} page visibility records for property {property_id}")
-            return len(rows_to_insert)
-        
-        except psycopg2.Error as e:
-            self.connection.rollback()
-            print(f"[ERROR] Failed to persist page visibility analysis: {e}")
-            raise RuntimeError(f"Database error persisting page visibility: {e}") from e
 
 
 
-    def persist_device_visibility_analysis(
-        self, 
-        account_id: str,
-        property_id: str, 
-        analysis_results: dict
-    ) -> int:
-        """
-        Persist device visibility to device_visibility_analysis table.
-        Strictly checked for account ownership.
-        
-        Args:
-            account_id: UUID of the account
-            property_id: UUID of the property
-            analysis_results: Dictionary with device data
-        
-        Returns:
-            Total number of rows inserted
-        """
-        if not self.connection or not self.cursor:
-            raise RuntimeError("Database connection not established")
-        
-        try:
-            # 🔐 SAFETY CHECK: Validate ownership
-            self.cursor.execute("""
-                SELECT 1 FROM properties 
-                WHERE id = %s AND account_id = %s
-            """, (property_id, account_id))
-            
-            if not self.cursor.fetchone():
-                raise ValueError(f"Property {property_id} does not belong to account {account_id}")
-
-            # 🗑 IDEMPOTENT DELETE: Remove existing records for this property
-            self.cursor.execute("""
-                DELETE FROM device_visibility_analysis
-                WHERE property_id = %s
-            """, (property_id,))
-            
-            # 📝 BATCH INSERT: Prepare new data
-            rows_to_insert = []
-            for device, data in analysis_results.items():
-                rows_to_insert.append((
-                    property_id,
-                    device,
-                    data.get('last_7_impressions', 0),
-                    data.get('prev_7_impressions', 0),
-                    data.get('impressions_delta_pct', 0.0),
-                    data.get('last_7_clicks', 0),
-                    data.get('prev_7_clicks', 0),
-                    data.get('clicks_delta_pct', 0.0),
-                    data.get('last_7_ctr', 0.0),
-                    data.get('prev_7_ctr', 0.0),
-                    data.get('ctr_delta_pct', 0.0)
-                ))
-            
-            if rows_to_insert:
-                execute_batch(
-                    self.cursor,
-                    """
-                    INSERT INTO device_visibility_analysis 
-                        (property_id, device, 
-                         last_7_impressions, prev_7_impressions, impressions_delta_pct,
-                         last_7_clicks, prev_7_clicks, clicks_delta_pct,
-                         last_7_ctr, prev_7_ctr, ctr_delta_pct, 
-                         created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                    """,
-                    rows_to_insert,
-                    page_size=10
-                )
-            
-            self.connection.commit()
-            print(f"✓ Persisted {len(rows_to_insert)} device visibility records for property {property_id}")
-            return len(rows_to_insert)
-        
-        except (psycopg2.Error, ValueError) as e:
-            self.connection.rollback()
-            print(f"[ERROR] Failed to persist device visibility analysis: {e}")
-            raise RuntimeError(f"Database error persisting device visibility: {e}") from e
 
 
     # =========================================================================
@@ -1130,84 +985,83 @@ class DatabasePersistence:
             raise RuntimeError(f"Database error fetching property metrics: {e}") from e
 
 
-    def fetch_page_visibility_analysis(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
+    def fetch_all_property_metrics_for_account(self, account_id: str) -> List[Dict[str, Any]]:
         """
-        Fetch page visibility analysis for a property (V1).
-        Strictly checked for account ownership.
+        Fetch metrics for ALL properties of an account in a single batch query.
+        Uses a CTE to anchor MAX(date) per property for canonical window slicing.
         
         Args:
             account_id: UUID of the account
-            property_id: UUID of the property
-        
+            
         Returns:
-            List of dicts with: category, page_url, impressions_last_7,
-                               impressions_prev_7, delta, delta_pct
+            List of dicts with: property_id, date, clicks, impressions, ctr, position
         """
         if not self.connection or not self.cursor:
             raise RuntimeError("Database connection not established")
         
         try:
-            self.cursor.execute("""
-                SELECT 
-                    v.category, v.page_url, v.impressions_last_7,
-                    v.impressions_prev_7, v.delta, v.delta_pct,
-                    v.clicks_last_7, v.clicks_prev_7, v.clicks_delta, v.clicks_delta_pct
-                FROM page_visibility_analysis v
-                JOIN properties p ON v.property_id = p.id
-                WHERE v.property_id = %s AND p.account_id = %s
-                ORDER BY v.delta_pct ASC
-            """, (property_id, account_id))
+            # We fetch ANALYSIS_WINDOW_DAYS of history per property
+            lookback_days = ANALYSIS_WINDOW_DAYS - 1
             
-            results = self.cursor.fetchall()
-            return [dict(row) for row in results]
+            # 🔐 BATCH QUERY: Anchored MAX(date) per property
+            self.cursor.execute(f"""
+                WITH property_dates AS (
+                    SELECT property_id, MAX(date) as max_date
+                    FROM property_daily_metrics m
+                    JOIN properties p ON m.property_id = p.id
+                    WHERE p.account_id = %s
+                    GROUP BY property_id
+                )
+                SELECT 
+                    m.property_id,
+                    m.date,
+                    m.clicks,
+                    m.impressions,
+                    m.ctr,
+                    m.position
+                FROM property_daily_metrics m
+                JOIN property_dates pd ON m.property_id = pd.property_id
+                WHERE m.date >= (pd.max_date - (%s * INTERVAL '1 day'))
+                ORDER BY m.property_id, m.date DESC
+            """, (account_id, lookback_days))
+            
+            metrics = self.cursor.fetchall()
+            return [dict(row) for row in metrics]
         
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch page visibility analysis: {e}")
-            raise RuntimeError(f"Database error fetching page visibility analysis: {e}") from e
+            print(f"[ERROR] Failed to batch fetch property metrics for account {account_id}: {e}")
+            raise RuntimeError(f"Database error batch fetching metrics: {e}") from e
 
 
-
-    def fetch_device_visibility_analysis(self, account_id: str, property_id: str) -> List[Dict[str, Any]]:
+    def fetch_recent_alert(
+        self, 
+        account_id: str, 
+        property_id: str, 
+        alert_type: str, 
+        within_hours: int = 24
+    ) -> Optional[Dict[str, Any]]:
         """
-        Fetch device visibility analysis for a property.
-        Strictly checked for account ownership.
-        
-        Args:
-            account_id: UUID of the account
-            property_id: UUID of the property
-        
-        Returns:
-            List of dicts with 10 analytical columns per device.
+        Check if a similar alert was triggered recently for deduplication.
+        Uses multiplication for safe interval parameterization.
         """
         if not self.connection or not self.cursor:
             raise RuntimeError("Database connection not established")
-        
+            
         try:
             self.cursor.execute("""
-                SELECT 
-                    v.device, 
-                    v.last_7_impressions, 
-                    v.prev_7_impressions, 
-                    v.impressions_delta_pct,
-                    v.last_7_clicks, 
-                    v.prev_7_clicks, 
-                    v.clicks_delta_pct,
-                    v.last_7_ctr, 
-                    v.prev_7_ctr, 
-                    v.ctr_delta_pct
-                FROM device_visibility_analysis v
-                JOIN properties p ON v.property_id = p.id
-                WHERE v.property_id = %s
-                  AND p.account_id = %s
-                ORDER BY v.device ASC
-            """, (property_id, account_id))
+                SELECT id, triggered_at 
+                FROM alerts 
+                WHERE account_id = %s 
+                  AND property_id = %s 
+                  AND alert_type = %s 
+                  AND triggered_at >= NOW() - (%s * INTERVAL '1 hour')
+                LIMIT 1
+            """, (account_id, property_id, alert_type, within_hours))
             
-            results = self.cursor.fetchall()
-            return [dict(row) for row in results]
-        
+            return self.cursor.fetchone()
         except psycopg2.Error as e:
-            print(f"[ERROR] Failed to fetch device visibility analysis: {e}")
-            raise RuntimeError(f"Database error fetching device visibility analysis: {e}") from e
+            print(f"[ERROR] Failed to fetch recent alert: {e}")
+            raise RuntimeError(f"Database error fetching recent alert: {e}") from e
 
 
     # =========================================================================

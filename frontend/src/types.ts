@@ -41,6 +41,8 @@ export interface Property {
 
 export interface PropertyOverview {
     property_id: string;
+    property_name: string;
+    initialized?: boolean;
     last_7_days: {
         clicks: number;
         impressions: number;
@@ -148,4 +150,15 @@ export interface DashboardSummaryResponse {
     status?: 'not_initialized';
     message?: string;
     websites: WebsiteSummary[];
+}
+export interface Alert {
+    id: string;
+    property_id: string;
+    site_url: string;
+    alert_type: string;
+    prev_7_impressions: number;
+    last_7_impressions: number;
+    delta_pct: number;
+    triggered_at: string;
+    email_sent: boolean;
 }

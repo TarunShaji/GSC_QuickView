@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict WaQnoDObwxqezFAUqAWe97SdJ7OnmtL5uP0YZAzdTdhwOG15C2HqA0c4JiNI0qk
+\restrict rFUWGGELajwFe20CA0sHtq75X9gvVrF7FRvx86gFsguIUSBgwYacLjuf7mrKjHG
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.1 (Postgres.app)
@@ -3269,11 +3269,14 @@ CREATE TABLE public.device_visibility_analysis (
     device text NOT NULL,
     last_7_impressions integer DEFAULT 0 NOT NULL,
     prev_7_impressions integer DEFAULT 0 NOT NULL,
-    delta integer NOT NULL,
-    delta_pct numeric(10,2) NOT NULL,
-    classification text NOT NULL,
     created_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT device_visibility_analysis_classification_check CHECK ((classification = ANY (ARRAY['significant_drop'::text, 'significant_gain'::text, 'flat'::text]))),
+    last_7_clicks integer DEFAULT 0,
+    prev_7_clicks integer DEFAULT 0,
+    clicks_delta_pct numeric DEFAULT 0,
+    last_7_ctr numeric DEFAULT 0,
+    prev_7_ctr numeric DEFAULT 0,
+    ctr_delta_pct numeric DEFAULT 0,
+    impressions_delta_pct numeric DEFAULT 0,
     CONSTRAINT device_visibility_analysis_device_check CHECK ((device = ANY (ARRAY['desktop'::text, 'mobile'::text, 'tablet'::text])))
 );
 
@@ -3341,6 +3344,10 @@ CREATE TABLE public.page_visibility_analysis (
     delta integer NOT NULL,
     delta_pct numeric(10,2) NOT NULL,
     created_at timestamp with time zone DEFAULT now(),
+    clicks_last_7 integer DEFAULT 0,
+    clicks_prev_7 integer DEFAULT 0,
+    clicks_delta integer DEFAULT 0,
+    clicks_delta_pct numeric(6,2) DEFAULT 0.0,
     CONSTRAINT category_check CHECK ((category = ANY (ARRAY['new'::text, 'lost'::text, 'gain'::text, 'drop'::text]))),
     CONSTRAINT page_visibility_analysis_category_check CHECK ((category = ANY (ARRAY['new'::text, 'lost'::text, 'drop'::text, 'gain'::text])))
 );
@@ -4528,6 +4535,13 @@ CREATE INDEX idx_device_metrics_property_device ON public.device_daily_metrics U
 
 
 --
+-- Name: idx_device_visibility_property; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_device_visibility_property ON public.device_visibility_analysis USING btree (property_id);
+
+
+--
 -- Name: idx_page_metrics_property_date; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -4539,6 +4553,13 @@ CREATE INDEX idx_page_metrics_property_date ON public.page_daily_metrics USING b
 --
 
 CREATE INDEX idx_page_metrics_property_page ON public.page_daily_metrics USING btree (property_id, page_url);
+
+
+--
+-- Name: idx_page_visibility_property; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_page_visibility_property ON public.page_visibility_analysis USING btree (property_id);
 
 
 --
@@ -6627,5 +6648,5 @@ ALTER EVENT TRIGGER pgrst_drop_watch OWNER TO supabase_admin;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict WaQnoDObwxqezFAUqAWe97SdJ7OnmtL5uP0YZAzdTdhwOG15C2HqA0c4JiNI0qk
+\unrestrict rFUWGGELajwFe20CA0sHtq75X9gvVrF7FRvx86gFsguIUSBgwYacLjuf7mrKjHG
 

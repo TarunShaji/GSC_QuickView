@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../AuthContext';
@@ -12,13 +12,7 @@ export default function SettingsPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        if (accountId) {
-            fetchRecipients();
-        }
-    }, [accountId]);
-
-    const fetchRecipients = async () => {
+    const fetchRecipients = useCallback(async () => {
         try {
             setIsLoading(true);
             const data = await api.alerts.getRecipients(accountId!);
@@ -29,7 +23,13 @@ export default function SettingsPage() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [accountId]);
+
+    useEffect(() => {
+        if (accountId) {
+            fetchRecipients();
+        }
+    }, [accountId, fetchRecipients]);
 
     const handleAddRecipient = async (e: React.FormEvent) => {
         e.preventDefault();

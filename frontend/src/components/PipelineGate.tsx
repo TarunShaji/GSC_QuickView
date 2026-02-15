@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import api from '../api';
 import { useAuth } from '../AuthContext';
@@ -15,7 +15,7 @@ export default function PipelineGate({ children }: PipelineGateProps) {
     const [error, setError] = useState<string | null>(null);
     const [isStarting, setIsStarting] = useState(false);
 
-    const pollStatus = async () => {
+    const pollStatus = useCallback(async () => {
         if (!accountId) return;
         try {
             const data = await api.pipeline.getStatus(accountId);
@@ -23,13 +23,12 @@ export default function PipelineGate({ children }: PipelineGateProps) {
             return data;
         } finally {
             setIsLoading(false);
-            return null;
         }
-    };
+    }, [accountId]);
 
     useEffect(() => {
         pollStatus();
-    }, [accountId]);
+    }, [pollStatus]);
 
     // Poll while running or starting
     useEffect(() => {
@@ -46,7 +45,7 @@ export default function PipelineGate({ children }: PipelineGateProps) {
         const intervalTime = status?.is_running ? 1500 : 5000;
         const interval = setInterval(pollStatus, intervalTime);
         return () => clearInterval(interval);
-    }, [status?.is_running, status?.phase, accountId]);
+    }, [status?.is_running, status?.phase, accountId, pollStatus]);
 
     const handleRunPipeline = async () => {
         if (!accountId) return;

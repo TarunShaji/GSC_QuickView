@@ -12,6 +12,7 @@ from page_metrics_daily_ingestor import PageMetricsDailyIngestor
 from device_metrics_daily_ingestor import DeviceMetricsDailyIngestor
 from page_visibility_analyzer import PageVisibilityAnalyzer
 from device_visibility_analyzer import DeviceVisibilityAnalyzer
+from alert_detector import detect_alerts_for_all_properties
 from datetime import datetime, timedelta
 from config.date_windows import GSC_LAG_DAYS, INGESTION_WINDOW_DAYS, DAILY_INGEST_DAYS
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -184,11 +185,11 @@ def run_pipeline(account_id: str):
         db_properties = safe_properties
 
         # ========================================================================
-        # PHASE 2: PARALLEL ANALYSIS (Account Scoped)
+        # PHASE 2: PARALLEL ANALYSIS (Compute Only)
         # ========================================================================
         
-        log_step(account_id, "PHASE 2: ANALYSIS", "INFO")
-        db.update_pipeline_state(account_id, run_id, phase="analysis", current_step="Running visibility analysis")
+        log_step(account_id, "PHASE 2: ANALYSIS (Compute Only)", "INFO")
+        db.update_pipeline_state(account_id, run_id, phase="analysis", current_step="Running visibility analysis (Compute Only)")
         
         def analyze_page_visibility_task():
             db_local = DatabasePersistence()
@@ -223,18 +224,15 @@ def run_pipeline(account_id: str):
         )
 
         # ========================================================================
-        # PHASE 3: ALERT DETECTION
+        # PHASE 3: ALERT DETECTION (Hardened Refactor)
         # ========================================================================
         
         log_step(account_id, "PHASE 3: ALERT DETECTION", "INFO")
-        db.update_pipeline_state(account_id, run_id, phase="alerting", current_step="Detecting alerts")
+        db.update_pipeline_state(account_id, run_id, phase="post_analysis", current_step="Detecting alerts")
         
-        try:
-            import alert_detector
-            triggered_count = alert_detector.detect_alerts_for_all_properties(db, account_id=account_id)
-            log_step(account_id, f"Alert detection complete ({triggered_count} triggered)", "SUCCESS")
-        except Exception as e:
-            log_step(account_id, f"Alert detection non-critical error: {e}", "WARNING")
+        triggered_count = detect_alerts_for_all_properties(db, account_id)
+        
+        log_step(account_id, f"Alert detection complete: {triggered_count} alerts triggered", "SUCCESS")
 
         # ========================================================================
         # COMPLETION

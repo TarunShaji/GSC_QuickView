@@ -1,19 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../AuthContext';
+import type { Alert } from '../types';
 
-interface Alert {
-    id: string;
-    property_id: string;
-    site_url: string;
-    alert_type: string;
-    prev_7_impressions: number;
-    last_7_impressions: number;
-    delta_pct: number;
-    triggered_at: string;
-    email_sent: boolean;
-}
 
 export default function AlertsPage() {
     const { accountId } = useAuth();
@@ -22,7 +12,7 @@ export default function AlertsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchAlerts = async () => {
+    const fetchAlerts = useCallback(async () => {
         if (!accountId) return;
         try {
             setError(null);
@@ -33,7 +23,7 @@ export default function AlertsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [accountId]);
 
     useEffect(() => {
         fetchAlerts();
@@ -41,7 +31,7 @@ export default function AlertsPage() {
         // Auto-refresh every 5 seconds to show real-time email status changes
         const interval = setInterval(fetchAlerts, 5000);
         return () => clearInterval(interval);
-    }, [accountId]);
+    }, [fetchAlerts]);
 
     const formatDate = (isoString: string) => {
         const date = new Date(isoString);

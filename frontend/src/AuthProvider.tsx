@@ -1,18 +1,7 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import api from './api';
-
-interface AuthContextType {
-    accountId: string | null;
-    email: string | null;
-    isAuthenticated: boolean;
-    isLoading: boolean;
-    login: () => void;
-    logout: () => void;
-    error: string | null;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+import { AuthContext } from './AuthContext';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [accountId, setAccountId] = useState<string | null>(localStorage.getItem('gsc_account_id'));
@@ -52,6 +41,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         checkUrlParams();
     }, []);
 
+    useEffect(() => {
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'gsc_account_id' && !e.newValue) {
+                setAccountId(null);
+                setEmail(null);
+            }
+        };
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
+    }, []);
+
     const login = async () => {
         try {
             setIsLoading(true);
@@ -83,12 +83,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             {children}
         </AuthContext.Provider>
     );
-}
-
-export function useAuth() {
-    const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
-    return context;
 }

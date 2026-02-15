@@ -9,9 +9,9 @@ NO classification, NO thresholds, NO API calls.
 import os
 import json
 from datetime import datetime
-from typing import Dict, List, Any
-from db_persistence import DatabasePersistence
 from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
+from utils.metrics import safe_delta_pct
+from utils.windows import get_most_recent_date, split_rows_by_window, aggregate_metrics
 
 
 class DeviceVisibilityAnalyzer:
@@ -39,27 +39,7 @@ class DeviceVisibilityAnalyzer:
         
         return device_groups
 
-    def aggregate_window(self, window: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Aggregate clicks and impressions for a 7-day window.
-        Computes CTR from totals.
-        """
-        total_clicks = sum(row.get('clicks', 0) or 0 for row in window)
-        total_impressions = sum(row.get('impressions', 0) or 0 for row in window)
-        
-        ctr = total_clicks / total_impressions if total_impressions > 0 else 0.0
-        
-        return {
-            'clicks': total_clicks,
-            'impressions': total_impressions,
-            'ctr': ctr
-        }
     
-    def compute_delta_pct(self, last_val: float, prev_val: float) -> float:
-        """Compute percentage delta between two values"""
-        if prev_val == 0:
-            return 0.0
-        return ((last_val - prev_val) / prev_val) * 100
 
     def analyze_property(self, account_id: str, property_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -93,28 +73,18 @@ class DeviceVisibilityAnalyzer:
             if not device_metrics:
                 continue
             
-            # 1. Canonical Window Logic: Determine max date for this device
-            most_recent_date = max(row['date'] for row in device_metrics)
+            # 🟢 Use Centralized Window Logic
+            most_recent_date = get_most_recent_date(device_metrics)
+            last_7, prev_7 = split_rows_by_window(device_metrics, most_recent_date)
             
-            last_7 = []
-            prev_7 = []
-            
-            # 2. Assign rows to windows based on days_ago
-            for row in device_metrics:
-                days_ago = (most_recent_date - row['date']).days
-                if 0 <= days_ago < HALF_ANALYSIS_WINDOW:
-                    last_7.append(row)
-                elif HALF_ANALYSIS_WINDOW <= days_ago < ANALYSIS_WINDOW_DAYS:
-                    prev_7.append(row)
-            
-            # 3. Aggregate windows
-            last_7_agg = self.aggregate_window(last_7)
-            prev_7_agg = self.aggregate_window(prev_7)
+            # 🟢 Use Centralized Aggregation
+            last_7_agg = aggregate_metrics(last_7)
+            prev_7_agg = aggregate_metrics(prev_7)
             
             # 4. Compute Deltas
-            impressions_delta_pct = self.compute_delta_pct(last_7_agg['impressions'], prev_7_agg['impressions'])
-            clicks_delta_pct = self.compute_delta_pct(last_7_agg['clicks'], prev_7_agg['clicks'])
-            ctr_delta_pct = self.compute_delta_pct(last_7_agg['ctr'], prev_7_agg['ctr'])
+            impressions_delta_pct = safe_delta_pct(last_7_agg['impressions'], prev_7_agg['impressions'])
+            clicks_delta_pct = safe_delta_pct(last_7_agg['clicks'], prev_7_agg['clicks'])
+            ctr_delta_pct = safe_delta_pct(last_7_agg['ctr'], prev_7_agg['ctr'])
             
             # 5. Build Result Structure
             details[device] = {
@@ -157,14 +127,6 @@ class DeviceVisibilityAnalyzer:
         for prop in properties:
             result = self.analyze_property(account_id, prop)
             results.append(result)
-            
-            # Persist to database (Note: DB structure will be updated in next task)
-            if not result.get('insufficient_data', False):
-                self.db.persist_device_visibility_analysis(
-                    account_id=account_id,
-                    property_id=prop['id'],
-                    analysis_results=result['details']
-                )
         
         # Save to JSON for debugging
         output_dir = os.path.join(os.path.dirname(__file__), '..', 'outputs')

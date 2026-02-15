@@ -11,26 +11,39 @@ import type {
     PageVisibilityResponse,
     DeviceVisibilityResponse,
     RecipientsResponse,
-    DashboardSummaryResponse
+    DashboardSummaryResponse,
+    Alert
 } from './types';
 
 const API_BASE = '/api';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(`${API_BASE}${url}`, {
-        headers: {
-            'Content-Type': 'application/json',
-            ...(options?.headers || {}),
-        },
-        ...options,
-    });
+    try {
+        const response = await fetch(`${API_BASE}${url}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                ...(options?.headers || {}),
+            },
+            ...options,
+        });
 
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error || `Request failed: ${response.status}`);
+        if (response.status === 401) {
+            localStorage.removeItem('gsc_account_id');
+            localStorage.removeItem('gsc_email');
+            window.location.reload();
+            return null as any;
+        }
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error || `Request failed: ${response.status}`);
+        }
+
+        return response.json();
+    } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') throw err;
+        throw new Error(err instanceof Error ? err.message : 'Network error');
     }
-
-    return response.json();
 }
 
 export const api = {
@@ -74,7 +87,7 @@ export const api = {
 
     alerts: {
         getAll: (accountId: string, limit: number = 20) =>
-            fetchJson<any[]>(`/alerts?account_id=${accountId}&limit=${limit}`),
+            fetchJson<Alert[]>(`/alerts?account_id=${accountId}&limit=${limit}`),
         getRecipients: (accountId: string) =>
             fetchJson<RecipientsResponse>(`/alert-recipients?account_id=${accountId}`),
         addRecipient: (accountId: string, email: string) =>

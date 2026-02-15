@@ -15,6 +15,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+from page_visibility_analyzer import PageVisibilityAnalyzer
+
+
 def log_dispatcher(message: str, account_email: Optional[str] = None):
     """Log dispatcher messages with timestamp and account context"""
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -24,22 +27,39 @@ def log_dispatcher(message: str, account_email: Optional[str] = None):
 
 def fetch_seo_health_summary(account_id: str, property_id: str, db) -> Dict[str, Any]:
     """
-    Fetch SEO health summary for a property.
+    Fetch SEO health summary for a property using dynamic computation.
     """
-    pages_data = db.fetch_page_visibility_analysis(account_id, property_id)
+    # 🟢 Use Isolated Analyzer
+    analyzer = PageVisibilityAnalyzer(db)
+    property_meta = db.fetch_property_by_id(account_id, property_id)
     
-    categories = {"new": [], "lost": [], "drop": [], "gain": []}
-    for page in pages_data:
-        cat = page.get("category", "new")
-        if cat in categories:
-            categories[cat].append(page)
+    if not property_meta:
+        return {
+            "new_count": 0,
+            "lost_count": 0,
+            "drop_count": 0,
+            "gain_count": 0,
+            "lost_pages": []
+        }
+    
+    # Analyze one property only
+    result = analyzer.analyze_property(account_id, property_meta)
+    
+    if result.get("insufficient_data"):
+        return {
+            "new_count": 0,
+            "lost_count": 0,
+            "drop_count": 0,
+            "gain_count": 0,
+            "lost_pages": []
+        }
     
     return {
-        "new_count": len(categories["new"]),
-        "lost_count": len(categories["lost"]),
-        "drop_count": len(categories["drop"]),
-        "gain_count": len(categories["gain"]),
-        "lost_pages": [p["page_url"] for p in categories["lost"][:10]]
+        "new_count": len(result["new_pages"]),
+        "lost_count": len(result["lost_pages"]),
+        "drop_count": len(result["drops"]),
+        "gain_count": len(result["gains"]),
+        "lost_pages": [p["page_url"] for p in result["lost_pages"][:10]]
     }
 
 

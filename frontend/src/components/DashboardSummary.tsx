@@ -258,20 +258,20 @@ export default function DashboardSummary() {
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-white font-medium">
-                                                                {formatNumber(property.last_7.impressions)}
+                                                                {formatNumber(property.last_7?.impressions ?? 0)}
                                                             </span>
-                                                            <span className={getDeltaColor(property.delta_pct.impressions, 'impressions')}>
-                                                                ({formatDelta(property.delta_pct.impressions)})
+                                                            <span className={getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')}>
+                                                                {formatDelta(property.delta_pct?.impressions ?? 0)}
                                                             </span>
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-white font-medium">
-                                                                {formatNumber(property.last_7.clicks)}
+                                                                {formatNumber(property.last_7?.clicks ?? 0)}
                                                             </span>
-                                                            <span className={getDeltaColor(property.delta_pct.clicks, 'clicks')}>
-                                                                ({formatDelta(property.delta_pct.clicks)})
+                                                            <span className={getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')}>
+                                                                {formatDelta(property.delta_pct?.clicks ?? 0)}
                                                             </span>
                                                         </div>
                                                     </td>
@@ -290,16 +290,16 @@ export default function DashboardSummary() {
                                                                 <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
                                                                     <div className="text-xs text-slate-400 mb-2">Impressions</div>
                                                                     <div className="text-2xl font-bold text-white mb-1">
-                                                                        {formatNumber(property.last_7.impressions)}
+                                                                        {formatNumber(property.last_7?.impressions ?? 0)}
                                                                     </div>
                                                                     <div className="text-sm text-slate-400">
                                                                         Last 7d
                                                                     </div>
                                                                     <div className="text-sm text-slate-500 mt-2">
-                                                                        {formatNumber(property.prev_7.impressions)} (Prev 7d)
+                                                                        {formatNumber(property.prev_7?.impressions ?? 0)} (Prev 7d)
                                                                     </div>
-                                                                    <div className={`text-sm font-medium mt-1 ${getDeltaColor(property.delta_pct.impressions, 'impressions')}`}>
-                                                                        {formatDelta(property.delta_pct.impressions)}
+                                                                    <div className={`text-sm font-medium mt-1 ${getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')}`}>
+                                                                        {formatDelta(property.delta_pct?.impressions ?? 0)}
                                                                     </div>
                                                                 </div>
 
@@ -307,16 +307,16 @@ export default function DashboardSummary() {
                                                                 <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
                                                                     <div className="text-xs text-slate-400 mb-2">Clicks</div>
                                                                     <div className="text-2xl font-bold text-white mb-1">
-                                                                        {formatNumber(property.last_7.clicks)}
+                                                                        {formatNumber(property.last_7?.clicks ?? 0)}
                                                                     </div>
                                                                     <div className="text-sm text-slate-400">
                                                                         Last 7d
                                                                     </div>
                                                                     <div className="text-sm text-slate-500 mt-2">
-                                                                        {formatNumber(property.prev_7.clicks)} (Prev 7d)
+                                                                        {formatNumber(property.prev_7?.clicks ?? 0)} (Prev 7d)
                                                                     </div>
-                                                                    <div className={`text-sm font-medium mt-1 ${getDeltaColor(property.delta_pct.clicks, 'clicks')}`}>
-                                                                        {formatDelta(property.delta_pct.clicks)}
+                                                                    <div className={`text-sm font-medium mt-1 ${getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')}`}>
+                                                                        {formatDelta(property.delta_pct?.clicks ?? 0)}
                                                                     </div>
                                                                 </div>
                                                             </div>

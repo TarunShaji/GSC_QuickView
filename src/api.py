@@ -1,10 +1,11 @@
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
-from fastapi.responses import JSONResponse, RedirectResponse
+from collections import defaultdict
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Dict, List, Any, Optional
-from config.date_windows import GSC_LAG_DAYS, ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
+from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 from datetime import datetime
 from decimal import Decimal
 
@@ -13,6 +14,10 @@ from main import run_pipeline
 from gsc_client import AuthError
 from auth_handler import GoogleAuthHandler
 from db_persistence import DatabasePersistence, init_db_pool, close_db_pool
+from page_visibility_analyzer import PageVisibilityAnalyzer
+from device_visibility_analyzer import DeviceVisibilityAnalyzer
+from utils.metrics import safe_delta_pct
+from utils.windows import get_most_recent_date, split_rows_by_window, aggregate_metrics
 
 
 # -------------------------------------------------------------------------
@@ -203,114 +208,78 @@ def get_property_overview(property_id: str, account_id: str):
     try:
         metrics = db.fetch_property_daily_metrics_for_overview(account_id, property_id)
         if not metrics:
-            raise HTTPException(status_code=404, detail="No metrics found for this property")
+            return {
+                "property_id": property_id,
+                "initialized": False,
+                "last_7_days": {
+                    "clicks": 0,
+                    "impressions": 0,
+                    "ctr": 0.0,
+                    "avg_position": 0.0,
+                    "days_with_data": 0
+                },
+                "prev_7_days": {
+                    "clicks": 0,
+                    "impressions": 0,
+                    "ctr": 0.0,
+                    "avg_position": 0.0,
+                    "days_with_data": 0
+                },
+                "deltas": {
+                    "clicks": 0,
+                    "impressions": 0,
+                    "clicks_pct": 0.0,
+                    "impressions_pct": 0.0,
+                    "ctr": 0.0,
+                    "ctr_pct": 0.0,
+                    "avg_position": 0.0
+                },
+                "computed_at": None
+            }
         
-        # Use most_recent_date instead of datetime.now() for GSC lag safety
-        most_recent_date = max(row['date'] for row in metrics)
+        # 🟢 Use Centralized Window Logic
+        most_recent_date = get_most_recent_date(metrics)
+        last_rows, prev_rows = split_rows_by_window(metrics, most_recent_date)
         
-        # Initialize aggregation windows
-        last_7 = {
-            "clicks": 0,
-            "impressions": 0,
-            "position_sum": 0.0,
-            "position_days": 0,
-            "days_with_data": 0
-        }
-        prev_7 = {
-            "clicks": 0,
-            "impressions": 0,
-            "position_sum": 0.0,
-            "position_days": 0,
-            "days_with_data": 0
-        }
+        # 🟢 Use Centralized Aggregation
+        last_7 = aggregate_metrics(last_rows)
+        prev_7 = aggregate_metrics(prev_rows)
         
-        # Aggregate metrics into canonical windows
-        # Metrics are already sorted DESC
+        # Compute deltas using safe_delta_pct
+        clicks_pct = safe_delta_pct(last_7["clicks"], prev_7["clicks"])
+        impressions_pct = safe_delta_pct(last_7["impressions"], prev_7["impressions"])
+        ctr_pct = safe_delta_pct(last_7["ctr"], prev_7["ctr"])
         
-        # Windows derive from source-of-truth constants
-        window_size = HALF_ANALYSIS_WINDOW
+        # Position delta (raw diff)
+        position_delta = last_7["avg_position"] - prev_7["avg_position"]
         
-        for row in metrics:
-            row_date = row['date']
-            days_ago = (most_recent_date - row_date).days
-            
-            # Last window (e.g. 0-6 days ago)
-            if 0 <= days_ago < window_size:
-                last_7["clicks"] += row['clicks'] or 0
-                last_7["impressions"] += row['impressions'] or 0
-                if row.get('position'):
-                    last_7["position_sum"] += float(row['position'])
-                    last_7["position_days"] += 1
-                last_7["days_with_data"] += 1
-            # Previous window (e.g. 7-13 days ago)
-            elif window_size <= days_ago < ANALYSIS_WINDOW_DAYS:
-                prev_7["clicks"] += row['clicks'] or 0
-                prev_7["impressions"] += row['impressions'] or 0
-                if row.get('position'):
-                    prev_7["position_sum"] += float(row['position'])
-                    prev_7["position_days"] += 1
-                prev_7["days_with_data"] += 1
-        
-        # Compute CTR (NOT averaged - total clicks / total impressions)
-        last_7_ctr = (last_7["clicks"] / last_7["impressions"]) if last_7["impressions"] > 0 else 0.0
-        prev_7_ctr = (prev_7["clicks"] / prev_7["impressions"]) if prev_7["impressions"] > 0 else 0.0
-        
-        # Compute Average Position
-        last_7_position = (last_7["position_sum"] / last_7["position_days"]) if last_7["position_days"] > 0 else 0.0
-        prev_7_position = (prev_7["position_sum"] / prev_7["position_days"]) if prev_7["position_days"] > 0 else 0.0
-        
-        # Compute deltas
-        c_delta = last_7["clicks"] - prev_7["clicks"]
-        i_delta = last_7["impressions"] - prev_7["impressions"]
-        ctr_delta = last_7_ctr - prev_7_ctr
-        position_delta = last_7_position - prev_7_position
-        
-        # Compute percentage deltas
-        clicks_pct = round((c_delta / prev_7["clicks"] * 100) if prev_7["clicks"] > 0 else 0, 2)
-        impressions_pct = round((i_delta / prev_7["impressions"] * 100) if prev_7["impressions"] > 0 else 0, 2)
-        ctr_pct = round((ctr_delta / prev_7_ctr * 100) if prev_7_ctr > 0 else 0, 2)
-        
-        # Structured logging
+        # Structured logging (preserved for visibility)
         print(f"\n[OVERVIEW] Property ID: {property_id}")
         print(f"[OVERVIEW] Most Recent Date: {most_recent_date}")
-        print(f"[OVERVIEW] Last 7 Days:")
-        print(f"  Clicks: {last_7['clicks']:,}")
-        print(f"  Impressions: {last_7['impressions']:,}")
-        print(f"  CTR: {last_7_ctr*100:.2f}%")
-        print(f"  Avg Position: {last_7_position:.1f}")
-        print(f"[OVERVIEW] Prev 7 Days:")
-        print(f"  Clicks: {prev_7['clicks']:,}")
-        print(f"  Impressions: {prev_7['impressions']:,}")
-        print(f"  CTR: {prev_7_ctr*100:.2f}%")
-        print(f"  Avg Position: {prev_7_position:.1f}")
-        print(f"[OVERVIEW] Deltas:")
-        print(f"  Clicks: {'+' if c_delta >= 0 else ''}{c_delta:,} ({'+' if clicks_pct >= 0 else ''}{clicks_pct}%)")
-        print(f"  Impressions: {'+' if i_delta >= 0 else ''}{i_delta:,} ({'+' if impressions_pct >= 0 else ''}{impressions_pct}%)")
-        print(f"  CTR: {'+' if ctr_delta >= 0 else ''}{ctr_delta*100:.2f}% ({'+' if ctr_pct >= 0 else ''}{ctr_pct}%)")
-        print(f"  Position: {'+' if position_delta >= 0 else ''}{position_delta:.1f} ({'worse' if position_delta > 0 else 'improvement' if position_delta < 0 else 'unchanged'})")
         
         return {
             "property_id": property_id,
+            "initialized": True,
             "last_7_days": {
                 "clicks": last_7["clicks"],
                 "impressions": last_7["impressions"],
-                "ctr": round(last_7_ctr, 4),
-                "avg_position": round(last_7_position, 2),
+                "ctr": round(last_7["ctr"], 4),
+                "avg_position": round(last_7["avg_position"], 2),
                 "days_with_data": last_7["days_with_data"]
             },
             "prev_7_days": {
                 "clicks": prev_7["clicks"],
                 "impressions": prev_7["impressions"],
-                "ctr": round(prev_7_ctr, 4),
-                "avg_position": round(prev_7_position, 2),
+                "ctr": round(prev_7["ctr"], 4),
+                "avg_position": round(prev_7["avg_position"], 2),
                 "days_with_data": prev_7["days_with_data"]
             },
             "deltas": {
-                "clicks": c_delta,
-                "impressions": i_delta,
+                "clicks": last_7["clicks"] - prev_7["clicks"],
+                "impressions": last_7["impressions"] - prev_7["impressions"],
                 "clicks_pct": clicks_pct,
                 "impressions_pct": impressions_pct,
-                "ctr": round(ctr_delta, 4),
+                "ctr": round(last_7["ctr"] - prev_7["ctr"], 4),
                 "ctr_pct": ctr_pct,
                 "avg_position": round(position_delta, 2)
             },
@@ -386,6 +355,14 @@ def get_dashboard_summary(account_id: str):
         # Fetch all websites for this account
         websites = db.fetch_all_websites(account_id)
         
+        # 🔐 BATCH FETCH metrics for ALL properties at once
+        all_metrics = db.fetch_all_property_metrics_for_account(account_id)
+        
+        # Group metrics by property_id in Python
+        metrics_by_prop = defaultdict(list)
+        for row in all_metrics:
+            metrics_by_prop[row['property_id']].append(row)
+            
         result = {"websites": []}
         
         for website in websites:
@@ -400,50 +377,18 @@ def get_dashboard_summary(account_id: str):
             
             for prop in properties:
                 property_id = prop['id']
+                prop_metrics = metrics_by_prop.get(property_id)
                 
-                # Fetch metrics for this property
-                metrics = db.fetch_property_daily_metrics_for_overview(account_id, property_id)
-                
-                if not metrics:
-                    # Skip properties with no data
+                if not prop_metrics:
                     continue
                 
-                # Find most recent date
-                most_recent_date = max(row['date'] for row in metrics)
+                # 🟢 Use Centralized Window logic
+                most_recent_date = get_most_recent_date(prop_metrics)
+                last_rows, prev_rows = split_rows_by_window(prop_metrics, most_recent_date)
                 
-                # Initialize 7v7 windows (days 1-7 vs days 8-14)
-                last_7 = {"clicks": 0, "impressions": 0, "days": 0}
-                prev_7 = {"clicks": 0, "impressions": 0, "days": 0}
-                
-                # Windows derive from constants
-                window_size = HALF_ANALYSIS_WINDOW
-                
-                for row in metrics:
-                    row_date = row['date']
-                    days_ago = (most_recent_date - row_date).days
-                    
-                    # Last window (e.g. 0-6 days ago)
-                    if 0 <= days_ago < window_size:
-                        last_7["clicks"] += row['clicks'] or 0
-                        last_7["impressions"] += row['impressions'] or 0
-                        last_7["days"] += 1
-                    # Previous window
-                    elif window_size <= days_ago < ANALYSIS_WINDOW_DAYS:
-                        prev_7["clicks"] += row['clicks'] or 0
-                        prev_7["impressions"] += row['impressions'] or 0
-                        prev_7["days"] += 1
-                
-                # Compute delta percentages
-                impressions_delta_pct = round(
-                    ((last_7["impressions"] - prev_7["impressions"]) / prev_7["impressions"] * 100)
-                    if prev_7["impressions"] > 0 else 0,
-                    1
-                )
-                clicks_delta_pct = round(
-                    ((last_7["clicks"] - prev_7["clicks"]) / prev_7["clicks"] * 100)
-                    if prev_7["clicks"] > 0 else 0,
-                    1
-                )
+                # 🟢 Use Centralized Aggregation
+                last_7 = aggregate_metrics(last_rows)
+                prev_7 = aggregate_metrics(prev_rows)
                 
                 # Use robust health classification
                 status = classify_property_health(
@@ -468,8 +413,8 @@ def get_dashboard_summary(account_id: str):
                         "clicks": prev_7["clicks"]
                     },
                     "delta_pct": {
-                        "impressions": impressions_delta_pct,
-                        "clicks": clicks_delta_pct
+                        "impressions": safe_delta_pct(last_7["impressions"], prev_7["impressions"]),
+                        "clicks": safe_delta_pct(last_7["clicks"], prev_7["clicks"])
                     }
                 })
             
@@ -483,23 +428,41 @@ def get_dashboard_summary(account_id: str):
 
 @app.get("/properties/{property_id}/pages")
 def get_page_visibility(property_id: str, account_id: str):
-    """Get page visibility analysis for a property"""
+    """Get page visibility analysis for a property (Dynamic Computation)"""
     db = DatabasePersistence()
     db.connect()
     try:
-        pages = db.fetch_page_visibility_analysis(account_id, property_id)
-        result = {"new": [], "lost": [], "drop": [], "gain": []}
-        totals = {"new": 0, "lost": 0, "drop": 0, "gain": 0}
-        
-        for page in pages:
-            cat = page.get("category", "new")
-            if cat in result:
-                result[cat].append(serialize_row(page))
-                totals[cat] += 1
-                
+        property_data = db.fetch_property_by_id(account_id, property_id)
+        if not property_data:
+            raise HTTPException(status_code=404, detail="Property not found")
+
+        analyzer = PageVisibilityAnalyzer(db)
+        result = analyzer.analyze_property(account_id, property_data)
+
+        if result.get("insufficient_data"):
+            return {
+                "property_id": property_id,
+                "pages": {"new": [], "lost": [], "drop": [], "gain": []},
+                "totals": {"new": 0, "lost": 0, "drop": 0, "gain": 0}
+            }
+
+        mapped = {
+            "new": result["new_pages"],
+            "lost": result["lost_pages"],
+            "drop": result["drops"],
+            "gain": result["gains"],
+        }
+
+        totals = {
+            "new": len(mapped["new"]),
+            "lost": len(mapped["lost"]),
+            "drop": len(mapped["drop"]),
+            "gain": len(mapped["gain"]),
+        }
+
         return {
-            "property_id": property_id, 
-            "pages": result,
+            "property_id": property_id,
+            "pages": mapped,
             "totals": totals
         }
     finally:
@@ -507,21 +470,26 @@ def get_page_visibility(property_id: str, account_id: str):
 
 @app.get("/properties/{property_id}/devices")
 def get_device_visibility(property_id: str, account_id: str):
-    """Get device visibility analysis for a property (pure passthrough)"""
+    """Get device visibility analysis for a property (Dynamic Computation)"""
     db = DatabasePersistence()
     db.connect()
     try:
-        rows = db.fetch_device_visibility_analysis(account_id, property_id)
-        
-        result = {}
-        for row in rows:
-            serialized = serialize_row(row)
-            device_name = serialized.get("device", "unknown")
-            result[device_name] = serialized
-            
+        property_data = db.fetch_property_by_id(account_id, property_id)
+        if not property_data:
+            raise HTTPException(status_code=404, detail="Property not found")
+
+        analyzer = DeviceVisibilityAnalyzer(db)
+        result = analyzer.analyze_property(account_id, property_data)
+
+        if result.get("insufficient_data"):
+            return {
+                "property_id": property_id,
+                "devices": {}
+            }
+
         return {
-            "property_id": property_id, 
-            "devices": result
+            "property_id": property_id,
+            "devices": result["details"]
         }
     finally:
         db.disconnect()

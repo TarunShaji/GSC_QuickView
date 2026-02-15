@@ -12,7 +12,8 @@ Logic:
 
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
+from utils.metrics import safe_delta_pct
+from utils.windows import get_most_recent_date, split_rows_by_window, aggregate_metrics
 
 
 def log_alert(message: str):
@@ -24,6 +25,7 @@ def log_alert(message: str):
 def compute_7v7_comparison(account_id: str, property_id: str, db) -> Optional[Dict[str, Any]]:
     """
     Compute 7-day vs previous 7-day comparison for a property.
+    Uses centralized window and aggregation utilities.
     
     Args:
         account_id: UUID of the account
@@ -42,29 +44,26 @@ def compute_7v7_comparison(account_id: str, property_id: str, db) -> Optional[Di
     # Get property URL for logging
     site_url = db.fetch_property_url(property_id)
     
-    # Compute 7v7 comparison using canonical slicing
-    # Metrics are already sorted DESC from db_persistence.py
-    if len(metrics) < ANALYSIS_WINDOW_DAYS:
-        return None
-        
-    last_7_rows = metrics[:HALF_ANALYSIS_WINDOW]
-    prev_7_rows = metrics[HALF_ANALYSIS_WINDOW:ANALYSIS_WINDOW_DAYS]
+    # 🟢 Use Centralized Window logic
+    most_recent_date = get_most_recent_date(metrics)
+    last_rows, prev_rows = split_rows_by_window(metrics, most_recent_date)
     
-    last_7_impressions = sum(row['impressions'] or 0 for row in last_7_rows)
-    prev_7_impressions = sum(row['impressions'] or 0 for row in prev_7_rows)
+    # 🟢 Use Centralized Aggregation
+    last_agg = aggregate_metrics(last_rows)
+    prev_agg = aggregate_metrics(prev_rows)
     
-    # Calculate delta percentage
-    if prev_7_impressions > 0:
-        delta_pct = ((last_7_impressions - prev_7_impressions) / prev_7_impressions) * 100
-    else:
-        delta_pct = 0
+    last_7_impressions = last_agg["impressions"]
+    prev_7_impressions = prev_agg["impressions"]
+    
+    # 🟢 Use Centralized Delta Logic
+    delta_pct = safe_delta_pct(last_7_impressions, prev_7_impressions)
     
     return {
         "property_id": property_id,
         "site_url": site_url,
         "prev_7_impressions": prev_7_impressions,
         "last_7_impressions": last_7_impressions,
-        "delta_pct": round(delta_pct, 1)
+        "delta_pct": delta_pct
     }
 
 
@@ -98,7 +97,7 @@ def should_trigger_alert(comparison: Dict[str, Any]) -> bool:
 
 def detect_alert_for_property(account_id: str, property_id: str, db) -> Optional[str]:
     """
-    Detect alert for a single property with explicit logging.
+    Detect alert for a single property with explicit logging and deduplication.
     
     Args:
         account_id: UUID of the account
@@ -128,6 +127,12 @@ def detect_alert_for_property(account_id: str, property_id: str, db) -> Optional
     
     # Check if alert should trigger
     if should_trigger_alert(comparison):
+        # 🔐 DEDUPLICATION CHECK
+        recent = db.fetch_recent_alert(account_id, property_id, "impression_drop", 24)
+        if recent:
+            log_alert("❌ Skipped (Recently triggered within 24h)")
+            return None
+
         log_alert(f"✅ Triggered (delta={delta_pct:+.1f}%)")
         
         # Insert alert into database

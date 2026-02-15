@@ -18,26 +18,12 @@ Core Logic:
 import json
 import os
 from datetime import datetime, timedelta
+from collections import defaultdict
 from typing import Dict, List, Any, Set, Tuple
 from db_persistence import DatabasePersistence
 from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
-
-
-def safe_delta_pct(current: int, previous: int) -> float:
-    """
-    Compute mathematically safe percentage delta.
-    
-    Rules:
-    - If previous > 0: standard delta calc
-    - If previous == 0 and current > 0: +100.0% (growth from zero)
-    - If previous == 0 and current == 0: 0.0%
-    """
-    if previous > 0:
-        return round(((current - previous) / previous) * 100, 1)
-    elif current > 0:
-        return 100.0
-    else:
-        return 0.0
+from utils.metrics import safe_delta_pct
+from utils.windows import get_most_recent_date, split_rows_by_window, aggregate_metrics
 
 
 class PageVisibilityAnalyzer:
@@ -75,30 +61,15 @@ class PageVisibilityAnalyzer:
         # Calculate date boundaries
         most_recent_date = max(row['date'] for row in rows)
         
-        # Windows: derived from canonical ANALYSIS_WINDOW_DAYS
-        window_size = HALF_ANALYSIS_WINDOW
+        if not rows:
+            return (set(), set())
         
-        # Last window: most_recent_date - 6 to most_recent_date
-        last_7_start = most_recent_date - timedelta(days=window_size - 1)
+        # 🟢 Use Centralized Window logic
+        most_recent_date = get_most_recent_date(rows)
+        last_rows, prev_rows = split_rows_by_window(rows, most_recent_date)
         
-        # Previous window: most_recent_date - 13 to most_recent_date - 7
-        prev_7_start = most_recent_date - timedelta(days=(window_size * 2) - 1)
-        prev_7_end = most_recent_date - timedelta(days=window_size)
-        
-        P_last = set()
-        P_prev = set()
-        
-        for row in rows:
-            page_url = row['page_url']
-            date = row['date']
-            
-            # Page belongs to P_last if it has impressions in last 7 days
-            if last_7_start <= date <= most_recent_date:
-                P_last.add(page_url)
-            
-            # Page belongs to P_prev if it has impressions in previous 7 days
-            if prev_7_start <= date <= prev_7_end:
-                P_prev.add(page_url)
+        P_last = {row['page_url'] for row in last_rows}
+        P_prev = {row['page_url'] for row in prev_rows}
         
         return (P_last, P_prev)
     
@@ -133,17 +104,22 @@ class PageVisibilityAnalyzer:
         Returns:
             Dict with 'impressions' and 'clicks'
         """
+        # Filter rows for this specific page
+        page_rows = [row for row in rows if row['page_url'] == page_url]
+        
+        # Split into canonical windows using provided dates
+        # Note: We filter by range here to maintain analyzer's specific aggregation needs
         matching_rows = [
-            row for row in rows
-            if row['page_url'] == page_url and start_date <= row['date'] <= end_date
+            row for row in page_rows 
+            if start_date <= row['date'] <= end_date
         ]
         
-        impressions = sum(row.get('impressions', 0) or 0 for row in matching_rows)
-        clicks = sum(row.get('clicks', 0) or 0 for row in matching_rows)
+        # 🟢 Use Centralized Aggregation
+        agg = aggregate_metrics(matching_rows)
         
         return {
-            'impressions': impressions,
-            'clicks': clicks
+            'impressions': agg['impressions'],
+            'clicks': agg['clicks']
         }
     
     def compute_page_deltas(self, rows: List[Dict[str, Any]], continuing_pages: Set[str],
@@ -160,11 +136,17 @@ class PageVisibilityAnalyzer:
         Returns:
             Tuple of (rising, declining) - lists of page dicts
         """
-        # Calculate date boundaries using canonical constants
-        window_size = HALF_ANALYSIS_WINDOW
-        last_7_start = most_recent_date - timedelta(days=window_size - 1)
+        # 🟢 Use Centralized Window logic
+        last_rows, prev_rows = split_rows_by_window(rows, most_recent_date)
+        
+        # Optimization: Pre-group metrics by page_url for faster lookup
+        rows_by_page = defaultdict(list)
+        for row in rows:
+            rows_by_page[row['page_url']].append(row)
+            
+        last_7_start = most_recent_date - timedelta(days=HALF_ANALYSIS_WINDOW - 1)
         prev_7_start = most_recent_date - timedelta(days=ANALYSIS_WINDOW_DAYS - 1)
-        prev_7_end = most_recent_date - timedelta(days=window_size)
+        prev_7_end = most_recent_date - timedelta(days=HALF_ANALYSIS_WINDOW)
         
         rising = []
         declining = []
@@ -357,18 +339,7 @@ class PageVisibilityAnalyzer:
             result = self.analyze_property(account_id, prop)
             results.append(result)
             
-            # Persist to database
             if not result['insufficient_data']:
-                self.db.persist_page_visibility_analysis(
-                    property_id=prop['id'],
-                    analysis_results={
-                        'new_pages': result['new_pages'],
-                        'lost_pages': result['lost_pages'],
-                        'gains': result['gains'],
-                        'drops': result['drops']
-                    }
-                )
-                
                 total_new += len(result['new_pages'])
                 total_lost += len(result['lost_pages'])
                 total_gains += len(result['gains'])
