@@ -1313,15 +1313,38 @@ class DatabasePersistence:
     # PIPELINE STATE MANAGEMENT
     # ==========================
 
+    def cleanup_stale_runs(self, account_id: str) -> None:
+        """
+        Detect and terminate any runs that have been 'is_running' for too long.
+        This provides deterministic recovery from server crashes or interruptions.
+        """
+        try:
+            self.cursor.execute("""
+                UPDATE pipeline_runs
+                SET is_running = false,
+                    error = 'Stale run auto-terminated',
+                    completed_at = NOW(),
+                    updated_at = NOW()
+                WHERE account_id = %s 
+                  AND is_running = true 
+                  AND started_at < NOW() - INTERVAL '60 minutes'
+            """, (account_id,))
+            if self.cursor.rowcount > 0:
+                print(f"[DB] Auto-terminated {self.cursor.rowcount} stale run(s) for account {account_id}")
+                self.connection.commit()
+        except Exception as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to cleanup stale runs for {account_id}: {e}")
+
     def fetch_pipeline_state(self, account_id: str) -> Optional[Dict[str, Any]]:
         """Fetch the latest pipeline run state for an account."""
         try:
+            self.cleanup_stale_runs(account_id)
             self.cursor.execute("""
                 SELECT 
-                    id, is_running, phase, current_step,
+                    id, is_running, current_step,
                     progress_current, progress_total,
-                    completed_steps, error, started_at,
-                    completed_at, updated_at
+                    error, started_at, completed_at, updated_at
                 FROM pipeline_runs
                 WHERE account_id = %s
                 ORDER BY updated_at DESC
@@ -1332,26 +1355,22 @@ class DatabasePersistence:
             if not row:
                 return {
                     "is_running": False,
-                    "phase": "idle",
                     "current_step": None,
-                    "progress": {"current": 0, "total": 0},
-                    "completed_steps": [],
+                    "progress_current": 0,
+                    "progress_total": 0,
                     "error": None,
-                    "started_at": None
+                    "started_at": None,
+                    "completed_at": None
                 }
             
             return {
-                "id": row['id'],
                 "is_running": row['is_running'],
-                "phase": row['phase'],
                 "current_step": row['current_step'],
-                "progress": {
-                    "current": row['progress_current'] or 0,
-                    "total": row['progress_total'] or 0
-                },
-                "completed_steps": row['completed_steps'] or [],
+                "progress_current": row['progress_current'] or 0,
+                "progress_total": row['progress_total'] or 0,
                 "error": row['error'],
-                "started_at": row['started_at'].isoformat() if row['started_at'] else None
+                "started_at": row['started_at'].isoformat() if row['started_at'] else None,
+                "completed_at": row['completed_at'].isoformat() if row['completed_at'] else None
             }
         except psycopg2.Error as e:
             print(f"[ERROR] Failed to fetch pipeline state for account {account_id}: {e}")
@@ -1360,35 +1379,24 @@ class DatabasePersistence:
     def start_pipeline_run(self, account_id: str) -> str:
         """
         Start a new pipeline run for an account.
-        Implements the FOR UPDATE locking strategy.
+        Relies on the unique index 'one_running_pipeline_per_account' for safety.
         """
+        self.cleanup_stale_runs(account_id)
         try:
-            self.begin_transaction()
-            
-            # 1. Check for active run with lock
             self.cursor.execute("""
-                SELECT id FROM pipeline_runs 
-                WHERE account_id = %s AND is_running = true 
-                FOR UPDATE
-            """, (account_id,))
-            
-            active_run = self.cursor.fetchone()
-            if active_run:
-                self.rollback_transaction()
-                raise RuntimeError("Pipeline is already running for this account")
-            
-            # 2. Insert new run
-            self.cursor.execute("""
-                INSERT INTO pipeline_runs (account_id, is_running, phase, started_at, updated_at)
-                VALUES (%s, true, 'setup', NOW(), NOW())
+                INSERT INTO pipeline_runs (account_id, is_running, started_at, updated_at)
+                VALUES (%s, true, NOW(), NOW())
                 RETURNING id
             """, (account_id,))
             
             run_id = self.cursor.fetchone()['id']
-            self.commit_transaction()
+            self.connection.commit()
             return run_id
+        except psycopg2.IntegrityError:
+            self.connection.rollback()
+            raise RuntimeError("Pipeline is already running for this account")
         except Exception as e:
-            self.rollback_transaction()
+            self.connection.rollback()
             raise e
 
     def update_pipeline_state(
@@ -1396,11 +1404,9 @@ class DatabasePersistence:
         account_id: str,
         run_id: str,
         is_running: Optional[bool] = None,
-        phase: Optional[str] = None,
         current_step: Optional[str] = None,
         progress_current: Optional[int] = None,
         progress_total: Optional[int] = None,
-        completed_steps: Optional[List[str]] = None,
         error: Optional[str] = None,
         completed_at: Optional[datetime] = None
     ) -> None:
@@ -1414,9 +1420,6 @@ class DatabasePersistence:
             if is_running is not None:
                 updates.append("is_running = %s")
                 params.append(is_running)
-            if phase is not None:
-                updates.append("phase = %s")
-                params.append(phase)
             if current_step is not None:
                 updates.append("current_step = %s")
                 params.append(current_step)
@@ -1426,9 +1429,6 @@ class DatabasePersistence:
             if progress_total is not None:
                 updates.append("progress_total = %s")
                 params.append(progress_total)
-            if completed_steps is not None:
-                updates.append("completed_steps = %s")
-                params.append(completed_steps)
             if error is not None:
                 updates.append("error = %s")
                 params.append(error)

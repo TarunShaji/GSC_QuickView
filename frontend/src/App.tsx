@@ -5,7 +5,6 @@ import DashboardSummary from './components/DashboardSummary';
 import PropertyDashboard from './components/PropertyDashboard';
 import AlertsPage from './components/AlertsPage';
 import SettingsPage from './components/SettingsPage';
-import PipelineGate from './components/PipelineGate';
 import './index.css';
 
 function MainLayout({ children }: { children: React.ReactNode }) {
@@ -23,17 +22,15 @@ function App() {
     <AuthProvider>
       <AuthGate>
         <BrowserRouter>
-          <PipelineGate>
-            <MainLayout>
-              <Routes>
-                <Route path="/" element={<DashboardSummary />} />
-                <Route path="/property/:propertyId" element={<PropertyDashboard />} />
-                <Route path="/alerts" element={<AlertsPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </MainLayout>
-          </PipelineGate>
+          <MainLayout>
+            <Routes>
+              <Route path="/" element={<DashboardSummary />} />
+              <Route path="/property/:propertyId" element={<PropertyDashboard />} />
+              <Route path="/alerts" element={<AlertsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </MainLayout>
         </BrowserRouter>
       </AuthGate>
     </AuthProvider>

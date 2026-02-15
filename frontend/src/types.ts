@@ -15,12 +15,12 @@ export interface PipelineProgress {
 
 export interface PipelineStatus {
     is_running: boolean;
-    phase: 'idle' | 'ingestion' | 'analysis' | 'completed' | 'failed';
     current_step: string | null;
-    progress: PipelineProgress;
-    completed_steps: string[];
+    progress_current: number;
+    progress_total: number;
     error: string | null;
     started_at: string | null;
+    completed_at: string | null;
 }
 
 // Data Types
@@ -161,4 +161,13 @@ export interface Alert {
     delta_pct: number;
     triggered_at: string;
     email_sent: boolean;
+}
+export interface PipelineStatus {
+    is_running: boolean;
+    current_step: string | null;
+    progress_current: number;
+    progress_total: number;
+    error: string | null;
+    started_at?: string | null;
+    completed_at?: string | null;
 }

@@ -32,44 +32,44 @@ def log_step(account_id: str, message: str, level: str = "INFO"):
     print(f"[{timestamp}] [ACCOUNT: {account_id}] {prefix} {message}")
 
 
-def run_pipeline(account_id: str):
+def run_pipeline(account_id: str, run_id: Optional[str] = None):
     """
     Execute the full GSC analytics pipeline for a specific account.
     
     Args:
         account_id: UUID of the account
+        run_id: Optional existing run ID (from API). If None, will create one.
     """
     log_step(account_id, "STARTING PIPELINE RUN", "INFO")
     
     db = DatabasePersistence()
     db.connect()
     
-    run_id = None
-    
     try:
         # ========================================================================
-        # PHASE 0: SETUP & LOCKING
+        # SETUP & LOCKING
         # ========================================================================
         
-        # This implements the FOR UPDATE lock to ensure one run per account
-        try:
-            run_id = db.start_pipeline_run(account_id)
-        except RuntimeError as e:
-            log_step(account_id, f"Pipeline block: {e}", "WARNING")
-            return
+        # If no run_id provided (e.g. CLI), create one
+        if not run_id:
+            try:
+                run_id = db.start_pipeline_run(account_id)
+            except RuntimeError as e:
+                log_step(account_id, f"Pipeline block: {e}", "WARNING")
+                return
 
-        db.update_pipeline_state(account_id, run_id, phase="setup", current_step="Authenticating with Google")
-        log_step(account_id, "PHASE 0: SETUP", "INFO")
+        db.update_pipeline_state(account_id, run_id, current_step="Authenticating with Google")
+        log_step(account_id, "SETUP", "INFO")
         
         try:
             client = GSCClient(db, account_id)
             log_step(account_id, "GSC authentication verified via DB tokens", "SUCCESS")
         except AuthError as e:
-            db.update_pipeline_state(account_id, run_id, phase="failed", error=str(e), is_running=False)
+            db.update_pipeline_state(account_id, run_id, error=str(e), is_running=False)
             log_step(account_id, f"Authentication FAILED: {e}", "ERROR")
             return
 
-        db.update_pipeline_state(account_id, run_id, completed_steps=["auth_check"], current_step="Syncing properties")
+        db.update_pipeline_state(account_id, run_id, current_step="Syncing properties")
         
         # Property sync
         log_step(account_id, "Fetching GSC properties...", "PROGRESS")
@@ -90,7 +90,7 @@ def run_pipeline(account_id: str):
         # Fetch properties for this specific account
         db_properties = db.fetch_all_properties(account_id)
         log_step(account_id, f"Synced {len(db_properties)} properties", "SUCCESS")
-        db.update_pipeline_state(account_id, run_id, completed_steps=["auth_check", "properties_sync"])
+        db.update_pipeline_state(account_id, run_id, current_step="Starting ingestion")
 
         # ========================================================================
         # PHASE 1: SEQUENTIAL INGESTION
@@ -109,7 +109,6 @@ def run_pipeline(account_id: str):
         
         db.update_pipeline_state(
             account_id, run_id, 
-            phase="ingestion", 
             current_step="Ingesting metrics",
             progress_current=0,
             progress_total=len(db_properties)
@@ -168,7 +167,6 @@ def run_pipeline(account_id: str):
             log_step(account_id, "No safe properties found. Ending pipeline early.", "WARNING")
             db.update_pipeline_state(
                 account_id, run_id, 
-                phase="completed", 
                 current_step="Pipeline finished (no properties ingested successfully)",
                 is_running=False,
                 completed_at=datetime.now()
@@ -177,7 +175,6 @@ def run_pipeline(account_id: str):
 
         db.update_pipeline_state(
             account_id, run_id, 
-            completed_steps=["auth_check", "properties_sync", "ingestion"],
             progress_current=len(db_properties)
         )
 
@@ -188,8 +185,8 @@ def run_pipeline(account_id: str):
         # PHASE 2: PARALLEL ANALYSIS (Compute Only)
         # ========================================================================
         
-        log_step(account_id, "PHASE 2: ANALYSIS (Compute Only)", "INFO")
-        db.update_pipeline_state(account_id, run_id, phase="analysis", current_step="Running visibility analysis (Compute Only)")
+        log_step(account_id, "ANALYSIS (Compute Only)", "INFO")
+        db.update_pipeline_state(account_id, run_id, current_step="Running visibility analysis (Compute Only)")
         
         def analyze_page_visibility_task():
             db_local = DatabasePersistence()
@@ -220,15 +217,15 @@ def run_pipeline(account_id: str):
         log_step(account_id, "Analysis complete", "SUCCESS")
         db.update_pipeline_state(
             account_id, run_id, 
-            completed_steps=["auth_check", "properties_sync", "ingestion", "analysis"]
+            current_step="Detection alerts"
         )
 
         # ========================================================================
         # PHASE 3: ALERT DETECTION (Hardened Refactor)
         # ========================================================================
         
-        log_step(account_id, "PHASE 3: ALERT DETECTION", "INFO")
-        db.update_pipeline_state(account_id, run_id, phase="post_analysis", current_step="Detecting alerts")
+        log_step(account_id, "ALERT DETECTION", "INFO")
+        db.update_pipeline_state(account_id, run_id, current_step="Detecting alerts")
         
         triggered_count = detect_alerts_for_all_properties(db, account_id)
         
@@ -240,7 +237,6 @@ def run_pipeline(account_id: str):
         
         db.update_pipeline_state(
             account_id, run_id, 
-            phase="completed", 
             current_step="Pipeline finished",
             is_running=False,
             completed_at=datetime.now()
@@ -252,9 +248,9 @@ def run_pipeline(account_id: str):
         log_step(account_id, "PIPELINE COMPLETED SUCCESSFULLY", "SUCCESS")
         
     except Exception as e:
-        log_step(account_id, f"PIPELINE CRITICAL FAILURE: {e}", "ERROR")
+        log_step(account_id, f"FATAL ERROR in pipeline: {e}", "ERROR")
         if run_id:
-            db.update_pipeline_state(account_id, run_id, phase="failed", error=str(e), is_running=False)
+            db.update_pipeline_state(account_id, run_id, error=str(e), is_running=False)
         raise
     finally:
         db.disconnect()

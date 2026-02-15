@@ -158,14 +158,17 @@ def run_pipeline_endpoint(account_id: str, background_tasks: BackgroundTasks):
     db = DatabasePersistence()
     db.connect()
     try:
-        # Check if already running (optional but good for UX)
-        state = db.fetch_pipeline_state(account_id)
-        if state and state.get('is_running'):
-            return {"status": "already_running", "account_id": account_id}
-            
-        # Trigger background task
-        background_tasks.add_task(run_pipeline, account_id)
-        return {"status": "started", "account_id": account_id}
+        # 1. Try to start the run synchronously to catch concurrency issues early
+        # This will fail with RuntimeError if already running thanks to the DB index.
+        run_id = db.start_pipeline_run(account_id)
+        
+        # 2. Trigger background task with the verified run_id
+        background_tasks.add_task(run_pipeline, account_id, run_id)
+        return {"status": "started", "account_id": account_id, "run_id": run_id}
+    except RuntimeError as e:
+        if "already running" in str(e).lower():
+            raise HTTPException(status_code=409, detail="Pipeline is already running for this account")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.disconnect()
 
