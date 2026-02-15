@@ -9,13 +9,7 @@ import smtplib
 from email.message import EmailMessage
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-
-from page_visibility_analyzer import PageVisibilityAnalyzer
+from settings import settings
 
 
 def log_dispatcher(message: str, account_email: Optional[str] = None):
@@ -100,14 +94,14 @@ SEO Health Summary:
     return body
 
 
-def create_email_message(account_id: str, alert: Dict[str, Any], recipients: List[str], smtp_from: str, db) -> EmailMessage:
+def create_email_message(account_id: str, alert: Dict[str, Any], recipients: List[str], db) -> EmailMessage:
     """Create email message for an alert"""
     subject = f"[SEO Alert] Impressions dropped by {abs(alert['delta_pct']):.1f}%"
     body = generate_email_body(account_id, alert, db)
     
     msg = EmailMessage()
     msg['Subject'] = subject
-    msg['From'] = smtp_from
+    msg['From'] = settings.SMTP_FROM_EMAIL
     msg['To'] = ', '.join(recipients)
     msg.set_content(body)
     return msg
@@ -125,25 +119,14 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
         log_dispatcher("No accounts found in database")
         return {'sent': 0, 'failed': 0}
 
-    # 2. Get SMTP Config
-    smtp_host = os.getenv('SMTP_HOST')
-    smtp_port = int(os.getenv('SMTP_PORT', 587))
-    smtp_user = os.getenv('SMTP_USER')
-    smtp_password = os.getenv('SMTP_PASSWORD')
-    smtp_from = os.getenv('SMTP_FROM_EMAIL')
-
-    if not all([smtp_host, smtp_user, smtp_password, smtp_from]):
-        log_dispatcher("❌ SMTP configuration incomplete")
-        return {'sent': 0, 'failed': 0}
-
     sent_count = 0
     failed_count = 0
 
     try:
         # 3. Open SINGLE SMTP connection
-        server = smtplib.SMTP(smtp_host, smtp_port, timeout=30)
+        server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30)
         server.starttls()
-        server.login(smtp_user, smtp_password)
+        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
         log_dispatcher("✅ SMTP connection authenticated")
 
         for acc in accounts:
@@ -165,7 +148,7 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
 
             for alert in pending:
                 try:
-                    msg = create_email_message(account_id, alert, recipients, smtp_from, db)
+                    msg = create_email_message(account_id, alert, recipients, db)
                     server.send_message(msg)
                     db.mark_alert_email_sent(alert['id'])
                     sent_count += 1
@@ -198,13 +181,8 @@ def main():
         # Import and connect to database
         from db_persistence import DatabasePersistence, init_db_pool, close_db_pool
         
-        # Initialize pool for Cron process
-        db_url = os.getenv("SUPABASE_DB_URL")
-        if not db_url:
-            log_dispatcher("❌ SUPABASE_DB_URL not found in environment.")
-            return
-
-        init_db_pool(db_url, minconn=1, maxconn=5)
+        # Initialize pool for Cron process using centralized settings
+        init_db_pool(settings.DATABASE_URL, minconn=1, maxconn=5)
         
         db = DatabasePersistence()
         db.connect()

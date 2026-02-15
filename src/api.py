@@ -1,13 +1,16 @@
 import os
 from contextlib import asynccontextmanager
 from collections import defaultdict
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, APIRouter
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Dict, List, Any, Optional
 from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 from datetime import datetime
 from decimal import Decimal
+
+from fastapi.middleware.cors import CORSMiddleware
+from settings import settings
 
 # Import internal modules
 from main import run_pipeline
@@ -27,12 +30,8 @@ from utils.windows import get_most_recent_date, split_rows_by_window, aggregate_
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage database connection pool lifecycle."""
-    db_url = os.getenv("SUPABASE_DB_URL")
-    if not db_url:
-        raise ValueError("SUPABASE_DB_URL not found in environment.")
-    
-    # Initialize global pool
-    init_db_pool(db_url, minconn=1, maxconn=10)
+    # Initialize global pool using centralized settings
+    init_db_pool(settings.DATABASE_URL, minconn=1, maxconn=10)
     
     yield
     
@@ -46,6 +45,18 @@ app = FastAPI(
     description="HTTP wrapper for multi-account Google Search Console analytics pipeline",
     version="2.0.0",
     lifespan=lifespan
+)
+
+# Initialize APIRouter for versioned/prefixed data endpoints
+api_router = APIRouter(prefix="/api")
+
+# Add CORS Middleware for production portability
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -119,26 +130,26 @@ def auth_callback(code: str):
     try:
         handler = GoogleAuthHandler(db)
         account_id, email = handler.handle_callback(code)
-        
-        # After success, we MUST redirect the browser back to the frontend app.
-        # The user mentioned port 5174 in their request.
-        frontend_url = "http://localhost:5173"
-        return RedirectResponse(url=f"{frontend_url}/?account_id={account_id}&email={email}")
-        
-    except Exception as e:
-        print(f"[API ERROR] Auth callback failed: {e}")
-        # On error, redirect back to frontend with error param so UX can show it
-        frontend_url = "http://localhost:5173"
-        return RedirectResponse(url=f"{frontend_url}/?auth_error={str(e)}")
-    finally:
         db.disconnect()
+        
+        # 🔗 Use dynamic frontend URL from settings
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/?account_id={account_id}&email={email}")
+    except Exception as e:
+        db.disconnect()
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/?error={str(e)}")
+
+
+@app.get("/auth/google/reauth")
+def force_reauth():
+    """Clear session logic simplified: redirect to home with clear flag"""
+    return RedirectResponse(url=f"{settings.FRONTEND_URL}/logout")
 
 
 # -------------------------------------------------------------------------
-# Pipeline Control
+# Pipeline Control (Namespaced)
 # -------------------------------------------------------------------------
 
-@app.post("/pipeline/run")
+@api_router.post("/pipeline/run")
 def run_pipeline_endpoint(account_id: str, background_tasks: BackgroundTasks):
     """
     Execute the full GSC analytics pipeline for a specific account.
@@ -158,7 +169,7 @@ def run_pipeline_endpoint(account_id: str, background_tasks: BackgroundTasks):
     finally:
         db.disconnect()
 
-@app.get("/pipeline/status")
+@api_router.get("/pipeline/status")
 def get_pipeline_status(account_id: str):
     """
     Get current pipeline execution status for an account from the database.
@@ -175,10 +186,10 @@ def get_pipeline_status(account_id: str):
 
 
 # -------------------------------------------------------------------------
-# Data Exploration (Account Scoped)
+# Data Exploration (Account Scoped, Namespaced)
 # -------------------------------------------------------------------------
 
-@app.get("/websites")
+@api_router.get("/websites")
 def get_websites(account_id: str):
     """Get all websites for an account"""
     db = DatabasePersistence()
@@ -189,7 +200,7 @@ def get_websites(account_id: str):
     finally:
         db.disconnect()
 
-@app.get("/websites/{website_id}/properties")
+@api_router.get("/websites/{website_id}/properties")
 def get_properties_by_website(website_id: str, account_id: str):
     """Get all properties for a website within an account"""
     db = DatabasePersistence()
@@ -200,7 +211,7 @@ def get_properties_by_website(website_id: str, account_id: str):
     finally:
         db.disconnect()
 
-@app.get("/properties/{property_id}/overview")
+@api_router.get("/properties/{property_id}/overview")
 def get_property_overview(property_id: str, account_id: str):
     """Get property overview with 7v7 comparison including CTR and Position"""
     db = DatabasePersistence()
@@ -335,7 +346,7 @@ def classify_property_health(
     
     return "healthy"
 
-@app.get("/dashboard-summary")
+@api_router.get("/dashboard-summary")
 def get_dashboard_summary(account_id: str):
     """
     Get dashboard summary with website-grouped property health status.
@@ -426,7 +437,7 @@ def get_dashboard_summary(account_id: str):
     finally:
         db.disconnect()
 
-@app.get("/properties/{property_id}/pages")
+@api_router.get("/properties/{property_id}/pages")
 def get_page_visibility(property_id: str, account_id: str):
     """Get page visibility analysis for a property (Dynamic Computation)"""
     db = DatabasePersistence()
@@ -468,7 +479,7 @@ def get_page_visibility(property_id: str, account_id: str):
     finally:
         db.disconnect()
 
-@app.get("/properties/{property_id}/devices")
+@api_router.get("/properties/{property_id}/devices")
 def get_device_visibility(property_id: str, account_id: str):
     """Get device visibility analysis for a property (Dynamic Computation)"""
     db = DatabasePersistence()
@@ -494,7 +505,7 @@ def get_device_visibility(property_id: str, account_id: str):
     finally:
         db.disconnect()
 
-@app.get("/alerts")
+@api_router.get("/alerts")
 def get_alerts(account_id: str, limit: int = 20):
     """Get recent alerts for an account"""
     db = DatabasePersistence()
@@ -505,10 +516,10 @@ def get_alerts(account_id: str, limit: int = 20):
     finally:
         db.disconnect()
 # -------------------------
-# Alert Recipients
+# Alert Recipients (Namespaced)
 # -------------------------
 
-@app.get("/alert-recipients")
+@api_router.get("/alert-recipients")
 def get_alert_recipients(account_id: str):
     """Get all alert recipients for an account"""
     db = DatabasePersistence()
@@ -519,7 +530,7 @@ def get_alert_recipients(account_id: str):
     finally:
         db.disconnect()
 
-@app.post("/alert-recipients")
+@api_router.post("/alert-recipients")
 def add_alert_recipient(request: RecipientRequest):
     """Add a new alert recipient"""
     db = DatabasePersistence()
@@ -530,7 +541,7 @@ def add_alert_recipient(request: RecipientRequest):
     finally:
         db.disconnect()
 
-@app.delete("/alert-recipients")
+@api_router.delete("/alert-recipients")
 def remove_alert_recipient(account_id: str, email: str):
     """Remove an alert recipient"""
     db = DatabasePersistence()
@@ -540,3 +551,9 @@ def remove_alert_recipient(account_id: str, email: str):
         return {"status": "success"}
     finally:
         db.disconnect()
+
+
+# -------------------------------------------------------------------------
+# Register Routers
+# -------------------------------------------------------------------------
+app.include_router(api_router)

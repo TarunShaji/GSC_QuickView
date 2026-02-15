@@ -8843,3 +8843,133 @@
 [19:55:18] [DISPATCHER] ============================================================
 [DB] Connection pool closed
 [19:55:18] [DISPATCHER] Database connection and pool closed
+[20:00:00] [DISPATCHER] ============================================================
+[20:00:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:00:00] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:00:05] [DISPATCHER] Database connection established
+[20:00:05] [DISPATCHER] Starting multi-account alert dispatcher
+[20:00:08] [DISPATCHER] ✅ SMTP connection authenticated
+[20:00:08] [DISPATCHER] SMTP connection closed
+[20:00:08] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:00:08] [DISPATCHER] ============================================================
+[20:00:08] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:00:08] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:00:09] [DISPATCHER] Database connection and pool closed
+[20:05:00] [DISPATCHER] ============================================================
+[20:05:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:05:00] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:05:08] [DISPATCHER] Database connection established
+[20:05:08] [DISPATCHER] Starting multi-account alert dispatcher
+[20:05:11] [DISPATCHER] ✅ SMTP connection authenticated
+[20:05:11] [DISPATCHER] SMTP connection closed
+[20:05:11] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:05:11] [DISPATCHER] ============================================================
+[20:05:11] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:05:11] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:05:11] [DISPATCHER] Database connection and pool closed
+[20:10:00] [DISPATCHER] ============================================================
+[20:10:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:10:00] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:10:13] [DISPATCHER] Database connection established
+[20:10:13] [DISPATCHER] Starting multi-account alert dispatcher
+[20:10:15] [DISPATCHER] ✅ SMTP connection authenticated
+[20:10:16] [DISPATCHER] SMTP connection closed
+[20:10:16] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:10:16] [DISPATCHER] ============================================================
+[20:10:16] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:10:16] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:10:17] [DISPATCHER] Database connection and pool closed
+[20:15:01] [DISPATCHER] ============================================================
+[20:15:01] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:15:01] [DISPATCHER] ============================================================
+[20:15:01] [DISPATCHER] ❌ Fatal error: No module named 'config.date_windows'; 'config' is not a package
+[20:15:01] [DISPATCHER] Dispatcher will retry on next cron run
+[20:20:00] [DISPATCHER] ============================================================
+[20:20:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:20:00] [DISPATCHER] ============================================================
+[20:20:00] [DISPATCHER] ❌ Fatal error: No module named 'config.date_windows'; 'config' is not a package
+[20:20:00] [DISPATCHER] Dispatcher will retry on next cron run
+[20:25:00] [DISPATCHER] ============================================================
+[20:25:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:25:00] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:25:05] [DISPATCHER] Database connection established
+[20:25:05] [DISPATCHER] Starting multi-account alert dispatcher
+[20:25:07] [DISPATCHER] ✅ SMTP connection authenticated
+[20:25:08] [DISPATCHER] SMTP connection closed
+[20:25:08] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:25:08] [DISPATCHER] ============================================================
+[20:25:08] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:25:08] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:25:08] [DISPATCHER] Database connection and pool closed
+[20:30:00] [DISPATCHER] ============================================================
+[20:30:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:30:00] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:30:02] [DISPATCHER] Database connection established
+[20:30:02] [DISPATCHER] Starting multi-account alert dispatcher
+[20:30:07] [DISPATCHER] ✅ SMTP connection authenticated
+[20:30:08] [DISPATCHER] SMTP connection closed
+[20:30:08] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:30:08] [DISPATCHER] ============================================================
+[20:30:08] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:30:08] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:30:08] [DISPATCHER] Database connection and pool closed
+[20:35:01] [DISPATCHER] ============================================================
+[20:35:01] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:35:01] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:35:02] [DISPATCHER] Database connection established
+[20:35:02] [DISPATCHER] Starting multi-account alert dispatcher
+[20:35:04] [DISPATCHER] ✅ SMTP connection authenticated
+[20:35:05] [DISPATCHER] SMTP connection closed
+[20:35:05] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:35:05] [DISPATCHER] ============================================================
+[20:35:05] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:35:05] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:35:05] [DISPATCHER] Database connection and pool closed
+[20:40:00] [DISPATCHER] ============================================================
+[20:40:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:40:00] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:40:01] [DISPATCHER] Database connection established
+[20:40:01] [DISPATCHER] Starting multi-account alert dispatcher
+[20:40:03] [DISPATCHER] ✅ SMTP connection authenticated
+[20:40:04] [DISPATCHER] SMTP connection closed
+[20:40:04] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:40:04] [DISPATCHER] ============================================================
+[20:40:04] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:40:04] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:40:04] [DISPATCHER] Database connection and pool closed
+[20:45:01] [DISPATCHER] ============================================================
+[20:45:01] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
+[20:45:01] [DISPATCHER] ============================================================
+[DB] Initializing connection pool (maxconn=5)...
+[DB] ✓ Connection pool initialized
+[20:45:01] [DISPATCHER] Database connection established
+[20:45:01] [DISPATCHER] Starting multi-account alert dispatcher
+[20:45:04] [DISPATCHER] ✅ SMTP connection authenticated
+[20:45:04] [DISPATCHER] SMTP connection closed
+[20:45:04] [DISPATCHER] Dispatcher finished: 0 sent, 0 failed
+[20:45:04] [DISPATCHER] ============================================================
+[20:45:04] [DISPATCHER] Summary: 0 sent, 0 failed
+[20:45:04] [DISPATCHER] ============================================================
+[DB] Connection pool closed
+[20:45:04] [DISPATCHER] Database connection and pool closed

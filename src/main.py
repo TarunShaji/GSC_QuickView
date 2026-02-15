@@ -260,16 +260,12 @@ def run_pipeline(account_id: str):
         db.disconnect()
 
 
+from settings import settings
+
 def main():
     """CLI Entrypoint for testing - runs the first account found in DB"""
-    import os
-    db_url = os.getenv("SUPABASE_DB_URL")
-    if not db_url:
-        print("❌ SUPABASE_DB_URL not found in environment.")
-        return
-
-    # Initialize pool for CLI process
-    init_db_pool(db_url, minconn=1, maxconn=5)
+    # Initialize pool for CLI process using centralized settings
+    init_db_pool(settings.DATABASE_URL, minconn=1, maxconn=5)
     
     try:
         db = DatabasePersistence()

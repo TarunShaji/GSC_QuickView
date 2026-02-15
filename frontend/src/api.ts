@@ -15,7 +15,9 @@ import type {
     Alert
 } from './types';
 
-const API_BASE = '/api';
+// Use dynamic VITE_API_URL for production portability
+// Locally, the Vite proxy handles /api -> localhost:8000
+const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     try {

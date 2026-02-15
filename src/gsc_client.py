@@ -11,6 +11,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
+from settings import settings
 from auth.token_model import GSCAuthToken
 
 
@@ -55,7 +56,7 @@ class GSCClient:
             refresh_token=token_obj.refresh_token,
             token_uri=token_obj.token_uri,
             client_id=token_obj.client_id,
-            client_secret=token_obj.client_secret,
+            client_secret=settings.GOOGLE_CLIENT_SECRET, # 🔐 Use settings instead of DB
             scopes=token_obj.scopes,
             expiry=expiry,
         )
