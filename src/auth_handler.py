@@ -53,7 +53,7 @@ class GoogleAuthHandler:
             include_granted_scopes='false',
             prompt='consent'
         )
-        
+        print("REDIRECT URI BEING SENT:", settings.GOOGLE_REDIRECT_URI)
         return authorization_url
 
     def handle_callback(self, code: str) -> Tuple[str, str]:

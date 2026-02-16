@@ -132,7 +132,7 @@ def health_check():
 # Authentication (OAuth 2.0 Web Flow)
 # -------------------------------------------------------------------------
 
-@app.get("/auth/google/url")
+@api_router.get("/auth/google/url")
 def get_auth_url():
     """
     Generate the Google OAuth authorization URL.
@@ -146,7 +146,7 @@ def get_auth_url():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/auth/google/callback")
+@api_router.get("/auth/google/callback")
 def auth_callback(code: str):
     """
     Handle the OAuth 2.0 callback DIRECTLY from Google.
@@ -166,7 +166,7 @@ def auth_callback(code: str):
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/?error={str(e)}")
 
 
-@app.get("/auth/google/reauth")
+@api_router.get("/auth/google/reauth")
 def force_reauth():
     """Clear session logic simplified: redirect to home with clear flag"""
     return RedirectResponse(url=f"{settings.FRONTEND_URL}/logout")

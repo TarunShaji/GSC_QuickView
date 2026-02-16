@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     @property
     def GOOGLE_REDIRECT_URI(self) -> str:
         """Dynamically derived redirect URI"""
-        return f"{self.BACKEND_URL}/auth/google/callback"
+        return f"{self.BACKEND_URL}/api/auth/google/callback"
 
     @property
     def ALLOWED_ORIGINS(self) -> List[str]:

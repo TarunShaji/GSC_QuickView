@@ -70,68 +70,67 @@ export default function PipelineBanner({ onSuccess }: PipelineBannerProps) {
         : 0;
 
     return (
-        <div
-            className={`fixed top-0 left-0 right-0 z-[60] px-6 py-3 border-b transition-all duration-700 animate-in slide-in-from-top fade-in duration-500 ${status.error
-                ? 'bg-red-950/80 border-red-500/30 text-red-100 shadow-[0_4px_20px_rgba(239,68,68,0.2)]'
-                : 'bg-slate-900/60 border-slate-700/50 text-white shadow-[0_4px_20px_rgba(30,41,59,0.5)]'
-                } backdrop-blur-xl`}
-        >
-            <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="px-6 py-4">
+            <div className={`rounded-lg border px-5 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all ${status.is_running
+                ? 'bg-white border-gray-200 shadow-sm'
+                : status.error
+                    ? 'bg-red-50 border-red-200'
+                    : 'bg-green-50 border-green-200'
+                }`}>
                 <div className="flex items-center gap-4 flex-1">
                     <div className="flex-shrink-0">
-                        {status.error ? (
-                            <div className="p-2 bg-red-500/20 rounded-lg border border-red-500/40">
-                                <span className="text-xl">⚠️</span>
+                        {status.is_running ? (
+                            <div className="w-10 h-10 bg-gray-50 flex items-center justify-center rounded-md border border-gray-200">
+                                <div className="w-5 h-5 border-2 border-gray-200 border-t-gray-900 rounded-full animate-spin" />
+                            </div>
+                        ) : status.error ? (
+                            <div className="w-10 h-10 rounded-md bg-red-100 flex items-center justify-center text-red-600">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
                             </div>
                         ) : (
-                            <div className="relative">
-                                <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
-                                    <span className="text-xl">🚀</span>
-                                </div>
-                                <div className="absolute -top-1 -right-1 flex h-3 w-3">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
-                                </div>
+                            <div className="w-10 h-10 rounded-md bg-green-100 flex items-center justify-center text-green-600">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
                             </div>
                         )}
                     </div>
 
                     <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs font-black uppercase tracking-widest opacity-60">
-                                {status.error ? 'Pipeline Halted' : 'Pipeline in Progress'}
-                            </span>
-                            {stuckInfo && (
-                                <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-300 text-[10px] font-bold rounded-full border border-yellow-500/30 animate-pulse">
-                                    Run appears stuck
-                                </span>
-                            )}
-                        </div>
-                        <p className="text-sm font-semibold tracking-tight">
-                            {status.error ? status.error : (status.current_step || 'Processing analytics...')}
-                        </p>
+                        <h3 className={`text-xs font-bold uppercase tracking-wider ${status.is_running ? 'text-gray-900' : status.error ? 'text-red-900' : 'text-green-900'
+                            }`}>
+                            {status.is_running ? 'Pipeline in Progress' : status.error ? 'Pipeline Halted' : 'Sync Successful'}
+                        </h3>
+                        {status.is_running ? (
+                            <div className="flex items-center gap-2">
+                                <p className="text-sm text-gray-500 font-medium">{status.current_step}</p>
+                                {status.progress_total > 0 && (
+                                    <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                        {status.progress_current}/{status.progress_total}
+                                    </span>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-gray-600 font-medium">
+                                {status.error ? status.error : `Database synced: ${new Date(status.completed_at!).toLocaleTimeString()}`}
+                            </p>
+                        )}
                     </div>
                 </div>
 
-                {!status.error && (
-                    <div className="flex items-center gap-6 w-full md:w-auto">
-                        <div className="flex-1 md:w-64">
-                            <div className="flex justify-between items-end mb-1.5">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Global Progress</span>
-                                <span className="text-sm font-black text-blue-400">{progress}%</span>
-                            </div>
-                            <div className="h-1.5 w-full bg-slate-800/50 rounded-full overflow-hidden border border-slate-700/30">
-                                <div
-                                    className="h-full bg-gradient-to-r from-blue-600 to-sky-400 transition-all duration-1000 ease-out"
-                                    style={{ width: `${progress}%` }}
-                                />
-                            </div>
+                {!status.error && status.is_running && (
+                    <div className="w-full sm:w-64">
+                        <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">Progress</span>
+                            <span className="text-xs font-black text-gray-900">{progress}%</span>
                         </div>
-                        <div className="hidden md:block text-right">
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Started At</p>
-                            <p className="text-xs font-medium text-slate-300">
-                                {status.started_at ? new Date(status.started_at).toLocaleTimeString() : 'Initializing...'}
-                            </p>
+                        <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200 shadow-inner">
+                            <div
+                                className="h-full bg-gray-900 transition-all duration-1000 ease-out"
+                                style={{ width: `${progress}%` }}
+                            />
                         </div>
                     </div>
                 )}
@@ -139,18 +138,16 @@ export default function PipelineBanner({ onSuccess }: PipelineBannerProps) {
                 {status.error && (
                     <button
                         onClick={() => window.location.reload()}
-                        className="px-4 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-xs font-bold transition-all"
+                        className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-widest rounded transition-colors shadow-sm"
                     >
-                        Dismiss & Refresh
+                        Retry Check
                     </button>
                 )}
             </div>
 
-            {stuckInfo && !status.error && (
-                <div className="mt-2 text-center">
-                    <p className="text-[10px] text-yellow-400/80 italic">
-                        This run has been active for over an hour. If progress is not moving, try refreshing the page.
-                    </p>
+            {stuckInfo && status.is_running && (
+                <div className="mt-3 px-5 py-3 bg-white border border-gray-200 rounded-lg shadow-sm flex items-start gap-3">
+                    <span className="text-lg">ℹ️</span>
                 </div>
             )}
         </div>

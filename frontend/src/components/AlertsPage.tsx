@@ -47,8 +47,8 @@ export default function AlertsPage() {
         return (
             <div className="flex items-center justify-center min-h-[400px]">
                 <div className="text-center">
-                    <div className="inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p className="text-slate-400">Loading alerts...</p>
+                    <div className="inline-block w-8 h-8 border-2 border-gray-200 border-t-gray-900 rounded-full animate-spin mb-4"></div>
+                    <p className="text-gray-500 font-medium">Loading alerts...</p>
                 </div>
             </div>
         );
@@ -56,108 +56,102 @@ export default function AlertsPage() {
 
     if (error) {
         return (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-6">
-                <p className="text-red-400">❌ {error}</p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                <p className="text-red-600 font-medium">❌ {error}</p>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <div className="flex items-center gap-6">
-                    <h1 className="text-2xl font-bold text-white">Alerts</h1>
-                    <nav className="flex gap-4">
-                        <button
-                            onClick={() => navigate('/')}
-                            className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-                        >
-                            Dashboard
-                        </button>
-                        <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg">
-                            Alerts
-                        </button>
-                        <button
-                            onClick={() => navigate('/settings')}
-                            className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-                        >
-                            Settings
-                        </button>
-                    </nav>
+        <div className="space-y-8">
+            <div className="flex justify-between items-end border-b border-gray-200 pb-8">
+                <div className="space-y-4">
+                    <button
+                        onClick={() => navigate('/')}
+                        className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-2 group"
+                    >
+                        <span className="group-hover:-translate-x-1 transition-transform">←</span> Portfolio Overview
+                    </button>
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">System Alerts</h1>
+                        <p className="text-gray-500 text-sm font-medium mt-1">
+                            Operational monitoring for performance anomalies
+                        </p>
+                    </div>
                 </div>
                 <button
                     onClick={fetchAlerts}
-                    className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                    className="px-4 py-2 bg-white border border-gray-200 text-gray-900 text-sm font-bold uppercase tracking-widest rounded hover:bg-gray-50 transition-colors shadow-sm"
                 >
                     Refresh
                 </button>
             </div>
 
             {alerts.length === 0 ? (
-                <div className="bg-slate-800 border border-slate-700 rounded-lg p-12 text-center">
-                    <div className="text-6xl mb-4">✅</div>
-                    <h3 className="text-xl font-semibold text-white mb-2">No Alerts</h3>
-                    <p className="text-slate-400">All properties are performing well!</p>
+                <div className="bg-white border border-gray-200 rounded-lg p-20 text-center shadow-sm">
+                    <div className="text-5xl mb-6">✅</div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">Systems Nominal</h3>
+                    <p className="text-gray-500 font-medium italic">No performance anomalies detected across tracked properties.</p>
                 </div>
             ) : (
-                <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
+                <div className="bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
                     <table className="w-full">
-                        <thead className="bg-slate-700/50">
+                        <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                                     Property
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                                     Type
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                                <th className="px-6 py-4 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                                     Previous 7D
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                                <th className="px-6 py-4 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                                     Last 7D
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                                <th className="px-6 py-4 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                                     Change
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                                <th className="px-6 py-4 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                                     Triggered
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                                <th className="px-6 py-4 text-center text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                                     Email
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-700">
+                        <tbody className="divide-y divide-gray-100">
                             {alerts.map((alert) => (
-                                <tr key={alert.id} className="hover:bg-slate-700/30 transition-colors">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                                        {alert.site_url}
+                                <tr key={alert.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        {alert.site_url.replace(/^https?:\/\/[^/]+/, '') || alert.site_url}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${alert.alert_type === 'critical'
-                                            ? 'bg-red-900/30 text-red-400 border border-red-800'
-                                            : 'bg-yellow-900/30 text-yellow-400 border border-yellow-800'
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${alert.alert_type === 'critical'
+                                            ? 'bg-red-50 text-red-700 border-red-100'
+                                            : 'bg-yellow-50 text-yellow-700 border-yellow-100'
                                             }`}>
                                             {alert.alert_type}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500 font-medium">
                                         {alert.prev_7_impressions.toLocaleString()}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-bold">
                                         {alert.last_7_impressions.toLocaleString()}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-red-400">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-red-600">
                                         {alert.delta_pct.toFixed(1)}%
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-500 font-medium italic">
                                         {formatDate(alert.triggered_at)}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-6 py-4 whitespace-nowrap text-center">
                                         {alert.email_sent ? (
-                                            <span className="text-green-400">✓ Sent</span>
+                                            <span className="text-[10px] font-bold text-green-600 uppercase tracking-tighter">✓ Dispatched</span>
                                         ) : (
-                                            <span className="text-yellow-400">⏳ Pending</span>
+                                            <span className="text-[10px] font-bold text-yellow-600 uppercase tracking-tighter">⏳ Queued</span>
                                         )}
                                     </td>
                                 </tr>

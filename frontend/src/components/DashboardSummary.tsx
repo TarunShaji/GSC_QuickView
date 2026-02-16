@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../AuthContext';
@@ -83,10 +83,10 @@ export default function DashboardSummary() {
 
     const getStatusBadge = (status: PropertySummary['status']) => {
         const badges = {
-            healthy: { icon: '🟢', text: 'Healthy', color: 'text-green-400 bg-green-900/30 border-green-800' },
-            warning: { icon: '🟡', text: 'Warning', color: 'text-yellow-400 bg-yellow-900/30 border-yellow-800' },
-            critical: { icon: '🔴', text: 'Critical', color: 'text-red-400 bg-red-900/30 border-red-800' },
-            insufficient_data: { icon: '⚪', text: 'Insufficient Data', color: 'text-slate-400 bg-slate-700/30 border-slate-600' }
+            healthy: { icon: '🟢', text: 'Healthy', color: 'text-green-700 bg-green-50 border-green-200' },
+            warning: { icon: '🟡', text: 'Warning', color: 'text-yellow-700 bg-yellow-50 border-yellow-200' },
+            critical: { icon: '🔴', text: 'Critical', color: 'text-red-700 bg-red-50 border-red-200' },
+            insufficient_data: { icon: '⚪', text: 'No Data', color: 'text-gray-600 bg-gray-50 border-gray-200' }
         };
         const badge = badges[status];
         return (
@@ -116,10 +116,10 @@ export default function DashboardSummary() {
     const getDeltaColor = (delta: number, metric: 'impressions' | 'clicks' | 'ctr' | 'position'): string => {
         if (metric === 'position') {
             // For position, negative is better (lower rank)
-            return delta < 0 ? 'text-green-400' : delta > 0 ? 'text-red-400' : 'text-slate-400';
+            return delta < 0 ? 'text-green-600' : delta > 0 ? 'text-red-600' : 'text-gray-500';
         }
         // For other metrics, positive is better
-        return delta > 0 ? 'text-green-400' : delta < 0 ? 'text-red-400' : 'text-slate-400';
+        return delta > 0 ? 'text-green-600' : delta < 0 ? 'text-red-600' : 'text-gray-500';
     };
 
     if (isLoading) {
@@ -215,100 +215,106 @@ export default function DashboardSummary() {
     }
 
     return (
-        <>
-            <PipelineBanner onSuccess={fetchSummary} />
-            <div className="space-y-4">
-                <div className="flex justify-between items-center mb-6">
-                    <div className="flex items-center gap-6">
-                        <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-                        <nav className="flex gap-4">
-                            <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg">
-                                Dashboard
-                            </button>
-                            <button
-                                onClick={() => navigate('/alerts')}
-                                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-                            >
-                                Alerts
-                            </button>
-                            <button
-                                onClick={() => navigate('/settings')}
-                                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-                            >
-                                Settings
-                            </button>
-                        </nav>
-                    </div>
+        <div className="space-y-6">
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-6">
+                <div className="flex items-center gap-6">
+                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Portfolio Overview</h1>
+                    <nav className="flex gap-1">
+                        <button className="px-4 py-2 text-sm font-semibold text-gray-900 border-b-2 border-gray-900">
+                            Dashboard
+                        </button>
+                        <button
+                            onClick={() => navigate('/alerts')}
+                            className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 rounded-md transition-colors"
+                        >
+                            Alerts
+                        </button>
+                        <button
+                            onClick={() => navigate('/settings')}
+                            className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 rounded-md transition-colors"
+                        >
+                            Settings
+                        </button>
+                    </nav>
+                </div>
 
+                <div className="flex items-center gap-3">
                     <button
                         onClick={handleRunPipeline}
                         disabled={isStarting}
-                        className="bg-slate-800 hover:bg-slate-700 text-white text-sm py-2 px-4 rounded-lg border border-slate-700 transition-colors flex items-center gap-2 group"
+                        className="inline-flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium py-2 px-4 rounded-md transition-all shadow-sm"
                     >
-                        <svg className={`w-4 h-4 transition-transform ${isStarting ? 'animate-spin' : 'group-hover:rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
+                        {isStarting ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white"></div>
+                        ) : (
+                            <svg className="w-4 h-4 transition-transform group-hover:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                        )}
                         Refresh Data
                     </button>
                 </div>
+            </header>
 
+            <PipelineBanner onSuccess={fetchSummary} />
+
+            <div className="space-y-4">
                 {summary.websites.map((website: WebsiteSummary) => (
-                    <div key={website.website_id} className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700">
+                    <div key={website.website_id} className="bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
                         {/* Website Header */}
                         <button
                             onClick={() => toggleWebsite(website.website_id)}
-                            className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-700/50 transition-colors"
+                            className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
                         >
                             <div className="flex items-center gap-3">
-                                <span className="text-2xl">
+                                <span className="text-gray-400 text-[10px]">
                                     {expandedWebsites.has(website.website_id) ? '▼' : '▶'}
                                 </span>
-                                <h2 className="text-lg font-semibold text-white">{website.website_domain}</h2>
-                                <span className="text-sm text-slate-400">
-                                    ({website.properties.length} {website.properties.length === 1 ? 'property' : 'properties'})
+                                <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider leading-relaxed">{website.website_domain}</h2>
+                                <span className="text-xs text-gray-500 font-medium tracking-tight">
+                                    {website.properties.length} {website.properties.length === 1 ? 'property' : 'properties'}
                                 </span>
                             </div>
                         </button>
 
                         {/* Property Table */}
                         {expandedWebsites.has(website.website_id) && (
-                            <div className="border-t border-slate-700">
+                            <div className="border-t border-gray-200">
                                 <div className="overflow-x-auto">
                                     <table className="w-full">
-                                        <thead className="bg-slate-700/50">
+                                        <thead className="bg-gray-50">
                                             <tr>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
                                                     Property
                                                 </th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
+                                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
                                                     Status
                                                 </th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                                                    Impressions (7D Avg)
+                                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
+                                                    Imps (7D)
                                                 </th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                                                    Clicks (7D Avg)
+                                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
+                                                    Clicks (7D)
                                                 </th>
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                                                    Data Through
+                                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
+                                                    Updated
                                                 </th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-700">
+                                        <tbody className="divide-y divide-gray-100">
                                             {website.properties.map((property: PropertySummary) => (
-                                                <>
+                                                <React.Fragment key={property.property_id}>
                                                     {/* Property Row */}
                                                     <tr
-                                                        key={property.property_id}
                                                         onClick={(e) => toggleProperty(property.property_id, e)}
-                                                        className="hover:bg-slate-700/30 cursor-pointer transition-colors"
+                                                        className="hover:bg-gray-50 cursor-pointer transition-colors"
                                                     >
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-slate-400">
+                                                                <span className="text-gray-400 text-[10px]">
                                                                     {expandedProperties.has(property.property_id) ? '▼' : '▶'}
                                                                 </span>
-                                                                {property.property_name}
+                                                                <span className="font-medium tracking-tight">{property.property_name}</span>
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 whitespace-nowrap">
@@ -316,25 +322,25 @@ export default function DashboardSummary() {
                                                         </td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-white font-medium">
+                                                                <span className="text-gray-900 font-semibold">
                                                                     {formatNumber(property.last_7?.impressions ?? 0)}
                                                                 </span>
-                                                                <span className={getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')}>
+                                                                <span className={`text-xs font-medium ${getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')}`}>
                                                                     {formatDelta(property.delta_pct?.impressions ?? 0)}
                                                                 </span>
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-white font-medium">
+                                                                <span className="text-gray-900 font-semibold">
                                                                     {formatNumber(property.last_7?.clicks ?? 0)}
                                                                 </span>
-                                                                <span className={getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')}>
+                                                                <span className={`text-xs font-medium ${getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')}`}>
                                                                     {formatDelta(property.delta_pct?.clicks ?? 0)}
                                                                 </span>
                                                             </div>
                                                         </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                                                        <td className="px-6 py-4 whitespace-nowrap text-[11px] font-medium text-gray-500">
                                                             {formatDate(property.data_through)}
                                                         </td>
                                                     </tr>
@@ -342,40 +348,44 @@ export default function DashboardSummary() {
                                                     {/* Expanded Metrics Row */}
                                                     {expandedProperties.has(property.property_id) && (
                                                         <tr key={`${property.property_id}-metrics`}>
-                                                            <td colSpan={5} className="px-6 py-6 bg-slate-900/50">
+                                                            <td colSpan={5} className="px-6 py-6 bg-gray-50/50">
                                                                 {/* 2 Metric Cards in a Row */}
-                                                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                                                <div className="grid grid-cols-2 gap-6 mb-4">
                                                                     {/* Impressions Card */}
-                                                                    <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                                                                        <div className="text-xs text-slate-400 mb-2">Impressions</div>
-                                                                        <div className="text-2xl font-bold text-white mb-1">
-                                                                            {formatNumber(property.last_7?.impressions ?? 0)}
-                                                                        </div>
-                                                                        <div className="text-sm text-slate-400">
-                                                                            Last 7d
-                                                                        </div>
-                                                                        <div className="text-sm text-slate-500 mt-2">
-                                                                            {formatNumber(property.prev_7?.impressions ?? 0)} (Prev 7d)
-                                                                        </div>
-                                                                        <div className={`text-sm font-medium mt-1 ${getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')}`}>
-                                                                            {formatDelta(property.delta_pct?.impressions ?? 0)}
+                                                                    <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
+                                                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-2 leading-relaxed py-1">Impressions</div>
+                                                                        <div className="flex items-baseline justify-between">
+                                                                            <div>
+                                                                                <div className="text-2xl font-bold text-gray-900 leading-tight">
+                                                                                    {formatNumber(property.last_7?.impressions ?? 0)}
+                                                                                </div>
+                                                                                <div className="text-[11px] text-gray-500 font-medium py-0.5">Last 7d</div>
+                                                                            </div>
+                                                                            <div className="text-right">
+                                                                                <div className={`text-sm font-bold ${getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')}`}>
+                                                                                    {formatDelta(property.delta_pct?.impressions ?? 0)}
+                                                                                </div>
+                                                                                <div className="text-[10px] text-gray-500 font-medium italic">vs. {formatNumber(property.prev_7?.impressions ?? 0)}</div>
+                                                                            </div>
                                                                         </div>
                                                                     </div>
 
                                                                     {/* Clicks Card */}
-                                                                    <div className="bg-slate-800 rounded-lg p-4 border border-slate-700">
-                                                                        <div className="text-xs text-slate-400 mb-2">Clicks</div>
-                                                                        <div className="text-2xl font-bold text-white mb-1">
-                                                                            {formatNumber(property.last_7?.clicks ?? 0)}
-                                                                        </div>
-                                                                        <div className="text-sm text-slate-400">
-                                                                            Last 7d
-                                                                        </div>
-                                                                        <div className="text-sm text-slate-500 mt-2">
-                                                                            {formatNumber(property.prev_7?.clicks ?? 0)} (Prev 7d)
-                                                                        </div>
-                                                                        <div className={`text-sm font-medium mt-1 ${getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')}`}>
-                                                                            {formatDelta(property.delta_pct?.clicks ?? 0)}
+                                                                    <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
+                                                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-2 leading-relaxed py-1">Clicks</div>
+                                                                        <div className="flex items-baseline justify-between">
+                                                                            <div>
+                                                                                <div className="text-2xl font-bold text-gray-900 leading-tight">
+                                                                                    {formatNumber(property.last_7?.clicks ?? 0)}
+                                                                                </div>
+                                                                                <div className="text-[11px] text-gray-500 font-medium py-0.5">Last 7d</div>
+                                                                            </div>
+                                                                            <div className="text-right">
+                                                                                <div className={`text-sm font-bold ${getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')}`}>
+                                                                                    {formatDelta(property.delta_pct?.clicks ?? 0)}
+                                                                                </div>
+                                                                                <div className="text-[10px] text-gray-500 font-medium italic">vs. {formatNumber(property.prev_7?.clicks ?? 0)}</div>
+                                                                            </div>
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -387,15 +397,15 @@ export default function DashboardSummary() {
                                                                             e.stopPropagation();
                                                                             navigate(`/property/${property.property_id}`);
                                                                         }}
-                                                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+                                                                        className="px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold uppercase tracking-widest rounded-md transition-all shadow-sm"
                                                                     >
-                                                                        View Full Overview →
+                                                                        Analysis Details →
                                                                     </button>
                                                                 </div>
                                                             </td>
                                                         </tr>
                                                     )}
-                                                </>
+                                                </React.Fragment>
                                             ))}
                                         </tbody>
                                     </table>
@@ -405,6 +415,6 @@ export default function DashboardSummary() {
                     </div>
                 ))}
             </div>
-        </>
+        </div>
     );
 }

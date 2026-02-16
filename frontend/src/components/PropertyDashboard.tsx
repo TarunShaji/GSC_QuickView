@@ -10,16 +10,16 @@ import type { PropertyOverview, PageVisibilityResponse, DeviceVisibilityResponse
  */
 const TrendIndicator = ({ pct, showLabel = true }: { pct: number, showLabel?: boolean }) => {
     let sign = '';
-    let color = 'text-slate-400';
+    let color = 'text-gray-400';
     let Icon = '–';
 
     if (pct > 0) {
         sign = '+';
-        color = 'text-green-400';
-        Icon = '↗';
+        color = 'text-green-600';
+        Icon = '↑';
     } else if (pct < 0) {
-        color = 'text-red-400';
-        Icon = '↘';
+        color = 'text-red-600';
+        Icon = '↓';
     }
 
     return (
@@ -30,9 +30,6 @@ const TrendIndicator = ({ pct, showLabel = true }: { pct: number, showLabel?: bo
     );
 };
 
-/**
- * Reusable KPI Card for Enterprise Layout
- */
 const KPICard = ({ label, current, prev, delta, isPercentage = false }: {
     label: string,
     current: number,
@@ -40,40 +37,37 @@ const KPICard = ({ label, current, prev, delta, isPercentage = false }: {
     delta: number,
     isPercentage?: boolean
 }) => (
-    <div className="bg-slate-900/40 p-6 rounded-xl border border-slate-700/30 transition-all hover:bg-slate-800/30 hover:shadow-xl hover:shadow-black/20 group">
-        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 group-hover:text-slate-400 transition-colors">
+    <div className="bg-white p-6 rounded-lg border border-gray-200 transition-shadow hover:shadow-sm group">
+        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-3 leading-relaxed py-1">
             {label}
         </p>
-        <p className="text-4xl font-bold text-white mb-3 tracking-tight">
-            {isPercentage ? `${((current ?? 0) * 100).toFixed(1)}%` : (current ?? 0).toLocaleString()}
-        </p>
-        <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 font-medium">
+        <div className="flex items-baseline justify-between">
+            <p className="text-3xl font-bold text-gray-900 tracking-tight">
+                {isPercentage ? `${((current ?? 0) * 100).toFixed(1)}%` : (current ?? 0).toLocaleString()}
+            </p>
+            <TrendIndicator pct={delta ?? 0} />
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between">
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Previous Window</span>
+            <span className="text-xs text-gray-500 font-medium">
                 {isPercentage ? `${((prev ?? 0) * 100).toFixed(1)}%` : (prev ?? 0).toLocaleString()}
             </span>
-            <TrendIndicator pct={delta ?? 0} />
         </div>
     </div>
 );
 
-/**
- * Standardized Metric Cell for Tables
- */
 const MetricCell = ({ primary, secondary, delta }: { primary: string | number, secondary: string | number, delta: number }) => (
     <div className="flex flex-col items-end">
-        <span className="text-base font-semibold text-white tracking-tight">
+        <span className="text-sm font-semibold text-gray-900 tracking-tight">
             {(primary ?? 0).toLocaleString()}
         </span>
-        <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-xs text-slate-500 font-medium">{(secondary ?? 0).toLocaleString()}</span>
-            <TrendIndicator pct={delta ?? 0} />
+        <div className="flex items-center gap-2 mt-1">
+            <span className="text-[10px] text-gray-500 font-medium italic">vs. {(secondary ?? 0).toLocaleString()}</span>
+            <TrendIndicator pct={delta ?? 0} showLabel={false} />
         </div>
     </div>
 );
 
-/**
- * Sortable Table Header
- */
 const SortableHeader = ({ label, sortKey, currentSort, onSort, align = 'right' }: {
     label: string,
     sortKey: 'impressions' | 'clicks',
@@ -84,13 +78,13 @@ const SortableHeader = ({ label, sortKey, currentSort, onSort, align = 'right' }
     const isActive = currentSort.key === sortKey;
     return (
         <th
-            className={`px-5 py-4 font-bold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-white transition-colors ${align === 'right' ? 'text-right' : 'text-left'}`}
+            className={`px-5 py-4 font-bold text-gray-500 uppercase tracking-widest text-[10px] cursor-pointer hover:text-gray-900 transition-colors leading-relaxed ${align === 'right' ? 'text-right' : 'text-left'}`}
             onClick={() => onSort(sortKey)}
         >
             <div className={`flex items-center gap-1.5 ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
                 {label}
-                <span className={`text-[10px] transition-transform ${isActive ? 'text-blue-400' : 'text-slate-700'}`}>
-                    {isActive ? (currentSort.dir === 'asc' ? '▲' : '▼') : '▲'}
+                <span className={`transition-transform ${isActive ? 'text-gray-900' : 'text-gray-300'}`}>
+                    {isActive ? (currentSort.dir === 'asc' ? '↑' : '↓') : '↑'}
                 </span>
             </div>
         </th>
@@ -181,49 +175,50 @@ export default function PropertyDashboard() {
                     </button>
                 </div>
             ) : (
-                <div className="space-y-8 animate-in fade-in duration-700">
+                <div className="space-y-8">
                     {/* Header: Title & Navigation */}
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-slate-800/40 pb-8">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-gray-200 pb-8">
                         <div className="space-y-4">
                             <button
                                 onClick={() => navigate('/')}
-                                className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-white transition-colors flex items-center gap-2 group"
+                                className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-2 group"
                             >
-                                <span className="group-hover:-translate-x-1 transition-transform">←</span> Back to Dashboard
+                                <span className="group-hover:-translate-x-1 transition-transform">←</span> Portfolio Overview
                             </button>
                             <div>
-                                <h1 className="text-3xl font-black text-white tracking-tight">
+                                <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
                                     {overview?.property_name || 'Property Analytics'}
                                     {selectedDevice !== 'all' && (
-                                        <span className="text-blue-500/80 ml-3 font-medium text-2xl uppercase tracking-tighter opacity-80">
+                                        <span className="text-gray-400 ml-3 font-medium text-2xl uppercase tracking-tighter opacity-80">
                                             · {selectedDevice}
                                         </span>
                                     )}
                                 </h1>
-                                <p className="text-slate-500 text-sm font-medium mt-1">
-                                    Enterprise Search Performance Analytics & Trend Tracking
+                                <p className="text-gray-500 text-sm font-medium mt-1">
+                                    Operational monitoring and trend tracking
                                 </p>
                             </div>
                         </div>
 
                         <div className="flex flex-col items-end gap-3">
-                            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+                            <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                                 <span>Data through:</span>
-                                <span className="text-slate-400 bg-slate-800/40 px-2 py-0.5 rounded border border-slate-700/20 italic">
+                                <span className="text-gray-600 font-bold bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
                                     {overview?.computed_at ? new Date(overview.computed_at).toLocaleDateString() : 'N/A'}
                                 </span>
                             </div>
-                            <div className="flex items-center gap-3 bg-slate-800/30 p-1.5 rounded-xl border border-slate-700/20 shadow-inner">
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-3">Filter</span>
+                            <div className="flex items-center gap-3 bg-white p-1 rounded-md border border-gray-200 shadow-sm">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-3">Device Filter</span>
                                 <select
                                     value={selectedDevice}
                                     onChange={(e) => setSelectedDevice(e.target.value as 'all' | 'mobile' | 'desktop' | 'tablet')}
-                                    className="bg-slate-900 text-white text-xs font-bold py-2 px-4 rounded-lg border border-slate-700/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer hover:bg-slate-950 transition-all shadow-xl"
+                                    className="bg-transparent text-gray-900 text-xs font-bold py-1.5 px-3 rounded focus:outline-none cursor-pointer hover:bg-gray-50 transition-all appearance-none pr-8 relative"
+                                    style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'%236b7280\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1rem' }}
                                 >
                                     <option value="all">All Devices</option>
-                                    <option value="mobile">Mobile</option>
-                                    <option value="desktop">Desktop</option>
-                                    <option value="tablet">Tablet</option>
+                                    <option value="mobile">Mobile Only</option>
+                                    <option value="desktop">Desktop Only</option>
+                                    <option value="tablet">Tablet Only</option>
                                 </select>
                             </div>
                         </div>
@@ -264,21 +259,18 @@ export default function PropertyDashboard() {
 
                     {/* SECTION 2: Rank Positioning */}
                     {selectedDevice === 'all' && overview && (
-                        <div className="bg-slate-800/20 p-8 rounded-2xl border border-slate-700/20 flex flex-col md:flex-row md:items-center justify-between gap-8 group transition-all hover:bg-slate-800/30">
+                        <div className="bg-white p-8 rounded-lg border border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-8 shadow-sm">
                             <div className="space-y-4">
-                                <div className="flex items-center gap-3">
-                                    <div className="p-3 bg-sky-500/10 rounded-xl border border-sky-500/20">
-                                        <span className="text-xl">📊</span>
-                                    </div>
+                                <div className="flex items-center gap-4">
                                     <div>
-                                        <h3 className="text-xs font-black text-slate-500 uppercase tracking-widest">Average Rank Position</h3>
-                                        <div className="flex items-baseline gap-4 mt-1">
-                                            <span className="text-5xl font-black text-sky-400 tracking-tighter">
+                                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Global Rank Position</h3>
+                                        <div className="flex items-baseline gap-6 mt-1">
+                                            <span className="text-5xl font-black text-gray-900 tracking-tighter">
                                                 {(overview.last_7_days?.avg_position ?? 0).toFixed(1)}
                                             </span>
                                             <div className="flex flex-col">
                                                 <TrendIndicator pct={-(overview.deltas?.avg_position ?? 0) * 10} showLabel={false} />
-                                                <span className={`text-[10px] font-bold uppercase tracking-tighter ${(overview.deltas?.avg_position ?? 0) < 0 ? 'text-green-500' : (overview.deltas?.avg_position ?? 0) > 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                                                <span className={`text-[10px] font-bold uppercase tracking-tighter ${(overview.deltas?.avg_position ?? 0) < 0 ? 'text-green-600' : (overview.deltas?.avg_position ?? 0) > 0 ? 'text-red-600' : 'text-gray-400'}`}>
                                                     {(overview.deltas?.avg_position ?? 0) < 0 ? 'Improvement' : (overview.deltas?.avg_position ?? 0) > 0 ? 'Decline' : 'Stable'}
                                                 </span>
                                             </div>
@@ -286,8 +278,8 @@ export default function PropertyDashboard() {
                                     </div>
                                 </div>
                             </div>
-                            <div className="max-w-md text-slate-500 text-xs font-medium leading-relaxed italic border-l border-slate-700/30 pl-8">
-                                Global average position across all tracked queries. A figure closer to 1.0 represents dominance in the primary search engine result pages (SERPs).
+                            <div className="max-w-xs text-gray-500 text-xs font-medium leading-relaxed border-l border-gray-100 pl-8">
+                                Global average position across all queries. A figure closer to 1.0 represents high dominance in search result pages.
                             </div>
                         </div>
                     )}
@@ -295,19 +287,18 @@ export default function PropertyDashboard() {
                     {/* SECTION 3: Page-Level Movements */}
                     {pages && (
                         <div className="space-y-6">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-800/40 pb-4">
-                                <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-3">
-                                    <span className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20 text-sm">📄</span>
-                                    Page-Level Movements
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-gray-200 pb-2">
+                                <h2 className="text-sm font-bold text-gray-900 tracking-widest uppercase flex items-center gap-3">
+                                    Visibility Changes
                                 </h2>
 
-                                {/* Enterprise Tab Bar */}
-                                <div className="flex gap-8 overflow-x-auto no-scrollbar">
+                                {/* Tab Bar */}
+                                <div className="flex gap-6">
                                     {[
-                                        { id: 'drop', label: 'Declining', color: 'rose' },
-                                        { id: 'gain', label: 'Rising', color: 'emerald' },
-                                        { id: 'new', label: 'Emerged', color: 'blue' },
-                                        { id: 'lost', label: 'Lost', color: 'slate' }
+                                        { id: 'drop', label: 'Declining' },
+                                        { id: 'gain', label: 'Rising' },
+                                        { id: 'new', label: 'Emerged' },
+                                        { id: 'lost', label: 'Lost' }
                                     ].map((tab) => {
                                         const isActive = activeTab === tab.id;
                                         const count = pages.totals[tab.id as keyof typeof pages.totals];
@@ -315,14 +306,14 @@ export default function PropertyDashboard() {
                                             <button
                                                 key={tab.id}
                                                 onClick={() => setActiveTab(tab.id as 'drop' | 'gain' | 'new' | 'lost')}
-                                                className={`pb-4 px-1 relative flex items-center gap-2.5 transition-all text-sm font-bold uppercase tracking-widest ${isActive ? 'text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                                                className={`pb-4 px-1 relative flex items-center gap-2 transition-all text-xs font-bold uppercase tracking-widest ${isActive ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
                                             >
                                                 {tab.label}
-                                                <span className={`text-[10px] px-2 py-0.5 rounded-full border ${isActive ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-900/50 border-slate-800 text-slate-600'}`}>
+                                                <span className={`text-[10px] px-2 py-0.5 rounded-md border ${isActive ? 'bg-gray-100 border-gray-200 text-gray-900' : 'bg-transparent border-gray-100 text-gray-400'}`}>
                                                     {count}
                                                 </span>
                                                 {isActive && (
-                                                    <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
+                                                    <div className="absolute bottom-[-1px] left-0 right-0 h-[2px] bg-gray-900" />
                                                 )}
                                             </button>
                                         );
@@ -330,13 +321,13 @@ export default function PropertyDashboard() {
                                 </div>
                             </div>
 
-                            <div className="bg-slate-900/20 rounded-2xl border border-slate-800/40 overflow-hidden shadow-2xl backdrop-blur-sm">
-                                <div className="max-h-[600px] overflow-y-auto custom-scrollbar">
+                            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+                                <div className="max-h-[600px] overflow-y-auto">
                                     {sortedPages.length > 0 ? (
                                         <table className="w-full text-sm table-fixed">
-                                            <thead className="sticky top-0 bg-slate-900 border-b border-slate-800/60 z-10 shadow-sm">
+                                            <thead className="sticky top-0 bg-gray-50 border-b border-gray-200 z-10">
                                                 <tr>
-                                                    <th className="px-8 py-4 text-left font-bold text-slate-500 uppercase tracking-widest text-[10px] w-1/2">Page Discovery Anchor</th>
+                                                    <th className="px-8 py-3 text-left font-bold text-gray-500 uppercase tracking-widest text-[10px] w-1/2">Page URL</th>
                                                     <SortableHeader
                                                         label="Impressions"
                                                         sortKey="impressions"
@@ -351,28 +342,28 @@ export default function PropertyDashboard() {
                                                     />
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-800/20">
+                                            <tbody className="divide-y divide-gray-100">
                                                 {sortedPages.map((item: PageVisibilityItem, i: number) => (
-                                                    <tr key={i} className="hover:bg-slate-800/10 transition-all group align-top">
-                                                        <td className="px-8 py-5 overflow-hidden">
+                                                    <tr key={i} className="hover:bg-gray-50 transition-colors group align-top">
+                                                        <td className="px-8 py-4 overflow-hidden">
                                                             <a
                                                                 href={item.page_url}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
-                                                                className="block truncate text-slate-400 group-hover:text-blue-400 transition-colors font-medium border-b border-transparent group-hover:border-blue-500/30"
+                                                                className="block truncate text-gray-500 group-hover:text-gray-900 transition-colors font-medium"
                                                                 title={item.page_url}
                                                             >
                                                                 {item.page_url.replace(/^https?:\/\/[^/]+/, '') || '/'}
                                                             </a>
                                                         </td>
-                                                        <td className="px-5 py-5 text-right">
+                                                        <td className="px-5 py-4 text-right">
                                                             <MetricCell
                                                                 primary={item.impressions_last_7}
                                                                 secondary={item.impressions_prev_7}
                                                                 delta={item.delta_pct}
                                                             />
                                                         </td>
-                                                        <td className="px-5 py-5 text-right">
+                                                        <td className="px-5 py-4 text-right">
                                                             <MetricCell
                                                                 primary={item.clicks_last_7}
                                                                 secondary={item.clicks_prev_7}
@@ -384,18 +375,16 @@ export default function PropertyDashboard() {
                                             </tbody>
                                         </table>
                                     ) : (
-                                        <div className="py-32 flex flex-col items-center justify-center text-center space-y-4">
-                                            <div className="text-4xl grayscale opacity-30">
-                                                {activeTab === 'drop' ? '📉' : activeTab === 'gain' ? '📈' : '✨'}
-                                            </div>
+                                        <div className="py-24 flex flex-col items-center justify-center text-center space-y-3 bg-white">
+                                            <div className="text-gray-100 text-6xl">∅</div>
                                             <div className="space-y-1">
-                                                <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">
-                                                    {activeTab === 'drop' ? 'No significant declines detected' :
-                                                        activeTab === 'gain' ? 'No rising pages this week 🎉' :
-                                                            'No pages found in this category'}
+                                                <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">
+                                                    {activeTab === 'drop' ? 'No significant declines' :
+                                                        activeTab === 'gain' ? 'No significant gains' :
+                                                            'No data found'}
                                                 </p>
-                                                <p className="text-slate-600 text-xs italic">
-                                                    All systems within normal operating parameters.
+                                                <p className="text-gray-300 text-[10px] font-medium italic">
+                                                    Operating within normal parameters.
                                                 </p>
                                             </div>
                                         </div>

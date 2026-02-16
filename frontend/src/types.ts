@@ -162,12 +162,3 @@ export interface Alert {
     triggered_at: string;
     email_sent: boolean;
 }
-export interface PipelineStatus {
-    is_running: boolean;
-    current_step: string | null;
-    progress_current: number;
-    progress_total: number;
-    error: string | null;
-    started_at?: string | null;
-    completed_at?: string | null;
-}
