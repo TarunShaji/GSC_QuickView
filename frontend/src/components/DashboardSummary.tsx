@@ -226,8 +226,8 @@ export default function DashboardSummary() {
                                             className="h-full bg-gray-900 transition-all duration-1000 ease-out"
                                             style={{
                                                 width: `${pipelineStatus.progress_total > 0
-                                                        ? (pipelineStatus.progress_current / pipelineStatus.progress_total) * 100
-                                                        : 0
+                                                    ? (pipelineStatus.progress_current / pipelineStatus.progress_total) * 100
+                                                    : 0
                                                     }% `
                                             }}
                                         />
@@ -461,7 +461,7 @@ export default function DashboardSummary() {
                                                                     <button
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            navigate(`/ property / ${property.property_id} `);
+                                                                            navigate(`/property/${property.property_id}`);
                                                                         }}
                                                                         className="px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold uppercase tracking-widest rounded-md transition-all shadow-sm"
                                                                     >
