@@ -48,7 +48,7 @@ const KPICard = ({ label, current, prev, delta, isPercentage = false }: {
             <TrendIndicator pct={delta ?? 0} />
         </div>
         <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Previous Window</span>
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Previous week</span>
             <span className="text-xs text-gray-500 font-medium">
                 {isPercentage ? `${((prev ?? 0) * 100).toFixed(1)}%` : (prev ?? 0).toLocaleString()}
             </span>
@@ -183,7 +183,7 @@ export default function PropertyDashboard() {
                                 onClick={() => navigate('/')}
                                 className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-2 group"
                             >
-                                <span className="group-hover:-translate-x-1 transition-transform">←</span> Portfolio Overview
+                                <span className="group-hover:-translate-x-1 transition-transform">←</span> Property Overview
                             </button>
                             <div>
                                 <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
@@ -194,17 +194,24 @@ export default function PropertyDashboard() {
                                         </span>
                                     )}
                                 </h1>
-                                <p className="text-gray-500 text-sm font-medium mt-1">
-                                    Operational monitoring and trend tracking
+                                <p className="text-gray-500 text-sm font-bold mt-1 uppercase tracking-wider">
+                                    Weekly Performance
                                 </p>
                             </div>
                         </div>
 
                         <div className="flex flex-col items-end gap-3">
                             <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                <span>Data through:</span>
+                                <span>Date range:</span>
                                 <span className="text-gray-600 font-bold bg-gray-50 px-2 py-0.5 rounded border border-gray-200">
-                                    {overview?.computed_at ? new Date(overview.computed_at).toLocaleDateString() : 'N/A'}
+                                    {(() => {
+                                        if (!overview?.computed_at) return 'N/A';
+                                        const endDate = new Date(overview.computed_at);
+                                        const startDate = new Date(endDate);
+                                        startDate.setDate(endDate.getDate() - 6);
+                                        const f = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                                        return `${f(startDate)}-${f(endDate)}`;
+                                    })()}
                                 </span>
                             </div>
                             <div className="flex items-center gap-3 bg-white p-1 rounded-md border border-gray-200 shadow-sm">

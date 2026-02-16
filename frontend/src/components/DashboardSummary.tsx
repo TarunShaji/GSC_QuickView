@@ -121,7 +121,7 @@ export default function DashboardSummary() {
         };
         const badge = badges[status];
         return (
-            <span className={`inline - flex items - center gap - 1 px - 2 py - 1 rounded text - xs border ${badge.color} `}>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${badge.color}`}>
                 <span>{badge.icon}</span>
                 <span>{badge.text}</span>
             </span>
@@ -140,8 +140,12 @@ export default function DashboardSummary() {
     };
 
     const formatDate = (dateStr: string): string => {
-        const date = new Date(dateStr);
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const endDate = new Date(dateStr);
+        const startDate = new Date(endDate);
+        startDate.setDate(endDate.getDate() - 6);
+
+        const f = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        return `${f(startDate)}-${f(endDate)}`;
     };
 
     const getDeltaColor = (delta: number, metric: 'impressions' | 'clicks' | 'ctr' | 'position'): string => {
@@ -168,7 +172,7 @@ export default function DashboardSummary() {
                 <div className="space-y-6">
                     <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-6">
                         <div className="flex items-center gap-6">
-                            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Portfolio Overview</h1>
+                            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Property Overview</h1>
                             <nav className="flex gap-1">
                                 <button className="px-4 py-2 text-sm font-semibold text-gray-900 border-b-2 border-gray-900">
                                     Dashboard
@@ -284,7 +288,7 @@ export default function DashboardSummary() {
         <div className="space-y-6">
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-6">
                 <div className="flex items-center gap-6">
-                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Portfolio Overview</h1>
+                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Property Overview</h1>
                     <nav className="flex gap-1">
                         <button className="px-4 py-2 text-sm font-semibold text-gray-900 border-b-2 border-gray-900">
                             Dashboard
@@ -406,7 +410,7 @@ export default function DashboardSummary() {
                                                                 </span>
                                                             </div>
                                                         </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-[11px] font-medium text-gray-500">
+                                                        <td className="px-6 py-4 whitespace-nowrap text-[10px] font-bold text-gray-900">
                                                             {formatDate(property.data_through)}
                                                         </td>
                                                     </tr>
