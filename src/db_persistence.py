@@ -1317,17 +1317,27 @@ class DatabasePersistence:
         """
         Detect and terminate any runs that have been 'is_running' for too long.
         This provides deterministic recovery from server crashes or interruptions.
+        
+        Dual-tier policy:
+        1. Soft Timeout (20m): No heartbeat (updated_at) for 20 minutes.
+        2. Hard Timeout (2h): Total runtime (started_at) exceeds 2 hours.
         """
         try:
             self.cursor.execute("""
                 UPDATE pipeline_runs
                 SET is_running = false,
-                    error = 'Stale run auto-terminated',
+                    error = CASE 
+                        WHEN started_at < NOW() - INTERVAL '2 hours' THEN 'Hard timeout exceeded (2h)'
+                        ELSE 'Stale run auto-terminated (no heartbeat)'
+                    END,
                     completed_at = NOW(),
                     updated_at = NOW()
                 WHERE account_id = %s 
                   AND is_running = true 
-                  AND started_at < NOW() - INTERVAL '60 minutes'
+                  AND (
+                      updated_at < NOW() - INTERVAL '20 minutes' 
+                      OR started_at < NOW() - INTERVAL '2 hours'
+                  )
             """, (account_id,))
             if self.cursor.rowcount > 0:
                 print(f"[DB] Auto-terminated {self.cursor.rowcount} stale run(s) for account {account_id}")
@@ -1399,6 +1409,22 @@ class DatabasePersistence:
             self.connection.rollback()
             raise e
 
+    def is_run_active(self, account_id: str, run_id: str) -> bool:
+        """
+        Check if a specific run is still active.
+        Used by threads to self-terminate if they've been marked stale externally.
+        """
+        try:
+            self.cursor.execute("""
+                SELECT is_running FROM pipeline_runs
+                WHERE id = %s AND account_id = %s
+            """, (run_id, account_id))
+            row = self.cursor.fetchone()
+            return bool(row and row['is_running'])
+        except Exception as e:
+            print(f"[ERROR] Failed to check if run {run_id} is active: {e}")
+            return False
+
     def update_pipeline_state(
         self,
         account_id: str,
@@ -1412,6 +1438,7 @@ class DatabasePersistence:
     ) -> None:
         """
         Update an existing pipeline run state.
+        Strictly enforced atomic update: only updates if is_running is true.
         """
         try:
             updates = []
@@ -1438,14 +1465,22 @@ class DatabasePersistence:
             
             updates.append("updated_at = now()")
             
+            # ATOMIC GUARD: Only update if the run is still marked as running in the DB
             query = f"""
                 UPDATE pipeline_runs 
                 SET {', '.join(updates)}
-                WHERE id = %s AND account_id = %s
+                WHERE id = %s 
+                  AND account_id = %s 
+                  AND is_running = true
             """
             params.extend([run_id, account_id])
             
             self.cursor.execute(query, tuple(params))
+            
+            if self.cursor.rowcount == 0:
+                # This indicates either the run_id doesn't exist or it was already terminated
+                print(f"[WARNING] Pipeline update failed for run {run_id}: Run is no longer active.")
+                
             self.connection.commit()
         except psycopg2.Error as e:
             self.connection.rollback()

@@ -1,7 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 from collections import defaultdict
-from fastapi import FastAPI, HTTPException, BackgroundTasks, APIRouter
+from fastapi import FastAPI, HTTPException, APIRouter
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Dict, List, Any, Optional
@@ -17,6 +17,7 @@ from main import run_pipeline
 from gsc_client import AuthError
 from auth_handler import GoogleAuthHandler
 from db_persistence import DatabasePersistence, init_db_pool, close_db_pool
+from concurrent.futures import ThreadPoolExecutor
 from page_visibility_analyzer import PageVisibilityAnalyzer
 from device_visibility_analyzer import DeviceVisibilityAnalyzer
 from utils.metrics import safe_delta_pct
@@ -29,13 +30,36 @@ from utils.windows import get_most_recent_date, split_rows_by_window, aggregate_
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage database connection pool lifecycle."""
+    """Manage database connection pool and threading lifecycle."""
     # Initialize global pool using centralized settings
-    init_db_pool(settings.DATABASE_URL, minconn=1, maxconn=10)
+    # maxconn=25 for concurrent pipelines (3 each) + dashboard traffic
+    init_db_pool(settings.DATABASE_URL, minconn=1, maxconn=25)
+    
+    # Initialize global thread pool for long-running ingestion tasks
+    # Capped at 4 concurrent runs as per requirements
+    app.state.executor = ThreadPoolExecutor(max_workers=4)
     
     yield
     
-    # Clean shutdown
+    # --- GRACEFUL SHUTDOWN ---
+    # 1. Mark runs active on THIS instance as interrupted before we die
+    if instance_active_runs:
+        print(f"[SHUTDOWN] Marking {len(instance_active_runs)} local run(s) as interrupted...")
+        db = DatabasePersistence()
+        db.connect()
+        try:
+            for acc_id, run_id in list(instance_active_runs):
+                db.update_pipeline_state(
+                    acc_id, run_id, 
+                    is_running=False, 
+                    error="Interrupted (Worker Shutdown)",
+                    completed_at=datetime.now()
+                )
+        finally:
+            db.disconnect()
+            
+    # 2. Shutdown thread pool
+    app.state.executor.shutdown(wait=False) # Don't wait forever, we already marked state
     close_db_pool()
 
 
@@ -58,6 +82,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Registry for runs active on THIS worker instance (for horizontal safety)
+instance_active_runs = set() # Set of (account_id, run_id)
 
 
 # -------------------------------------------------------------------------
@@ -149,26 +176,39 @@ def force_reauth():
 # Pipeline Control (Namespaced)
 # -------------------------------------------------------------------------
 
+def run_pipeline_wrapper(account_id: str, run_id: str):
+    """Wrapper to track active runs on this instance for graceful shutdown."""
+    instance_active_runs.add((account_id, run_id))
+    try:
+        run_pipeline(account_id, run_id)
+    finally:
+        instance_active_runs.discard((account_id, run_id))
+
 @api_router.post("/pipeline/run")
-def run_pipeline_endpoint(account_id: str, background_tasks: BackgroundTasks):
+def run_pipeline_endpoint(account_id: str):
     """
     Execute the full GSC analytics pipeline for a specific account.
-    Runs in the background.
+    Dispatched to a global ThreadPoolExecutor to isolate from request lifecycle.
     """
     db = DatabasePersistence()
     db.connect()
     try:
         # 1. Try to start the run synchronously to catch concurrency issues early
-        # This will fail with RuntimeError if already running thanks to the DB index.
+        # This will fail with IntegrityError if already running (via DB index).
         run_id = db.start_pipeline_run(account_id)
         
-        # 2. Trigger background task with the verified run_id
-        background_tasks.add_task(run_pipeline, account_id, run_id)
+        # 2. Trigger background task via global ThreadPoolExecutor
+        app.state.executor.submit(run_pipeline_wrapper, account_id, run_id)
+        
         return {"status": "started", "account_id": account_id, "run_id": run_id}
     except RuntimeError as e:
         if "already running" in str(e).lower():
             raise HTTPException(status_code=409, detail="Pipeline is already running for this account")
         raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        # Log unexpected errors
+        print(f"[ERROR] Failed to dispatch pipeline for {account_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error during pipeline dispatch")
     finally:
         db.disconnect()
 

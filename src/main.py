@@ -32,6 +32,17 @@ def log_step(account_id: str, message: str, level: str = "INFO"):
     print(f"[{timestamp}] [ACCOUNT: {account_id}] {prefix} {message}")
 
 
+def check_bail_out(account_id: str, run_id: str, db: DatabasePersistence) -> bool:
+    """
+    Check if the run is still marked as active in the DB.
+    Returns True if the thread should bail out.
+    """
+    if not db.is_run_active(account_id, run_id):
+        log_step(account_id, f"Bailing out: Run {run_id} is no longer active (marked stale or stopped externally).", "WARNING")
+        return True
+    return False
+
+
 def run_pipeline(account_id: str, run_id: Optional[str] = None):
     """
     Execute the full GSC analytics pipeline for a specific account.
@@ -124,6 +135,10 @@ def run_pipeline(account_id: str, run_id: Optional[str] = None):
             site_url = prop['site_url']
             prop_id = prop['id']
             
+            # 1. BAIL-OUT CHECK: Before processing each property
+            if check_bail_out(account_id, run_id, db):
+                return
+
             # Sub-step logging
             db.update_pipeline_state(
                 account_id, run_id, 
@@ -136,7 +151,7 @@ def run_pipeline(account_id: str, run_id: Optional[str] = None):
             needs_backfill = db.check_needs_backfill(account_id, prop_id)
             
             start_date = backfill_start if needs_backfill else daily_start
-            end_date = backfill_end
+            end_date = daily_end
             
             mode_str = "BACKFILL" if needs_backfill else "DAILY"
             log_step(account_id, f"Property {idx}/{len(db_properties)}: {site_url} ({mode_str} mode)", "PROGRESS")
@@ -185,7 +200,12 @@ def run_pipeline(account_id: str, run_id: Optional[str] = None):
         # PHASE 2: PARALLEL ANALYSIS (Compute Only)
         # ========================================================================
         
-        log_step(account_id, "ANALYSIS (Compute Only)", "INFO")
+        log_step(account_id, "PHASE 2: ANALYSIS (Compute Only)", "INFO")
+        
+        # 2. BAIL-OUT CHECK: Before entering Parallel Analysis
+        if check_bail_out(account_id, run_id, db):
+            return
+
         db.update_pipeline_state(account_id, run_id, current_step="Running visibility analysis (Compute Only)")
         
         def analyze_page_visibility_task():
@@ -224,7 +244,12 @@ def run_pipeline(account_id: str, run_id: Optional[str] = None):
         # PHASE 3: ALERT DETECTION (Hardened Refactor)
         # ========================================================================
         
-        log_step(account_id, "ALERT DETECTION", "INFO")
+        log_step(account_id, "PHASE 3: ALERT DETECTION", "INFO")
+        
+        # 3. BAIL-OUT CHECK: Before Alert Detection
+        if check_bail_out(account_id, run_id, db):
+            return
+
         db.update_pipeline_state(account_id, run_id, current_step="Detecting alerts")
         
         triggered_count = detect_alerts_for_all_properties(db, account_id)
@@ -249,11 +274,15 @@ def run_pipeline(account_id: str, run_id: Optional[str] = None):
         
     except Exception as e:
         log_step(account_id, f"FATAL ERROR in pipeline: {e}", "ERROR")
-        if run_id:
-            db.update_pipeline_state(account_id, run_id, error=str(e), is_running=False)
+        try:
+            # Atomic termination update
+            db.update_pipeline_state(account_id, run_id, error=str(e), is_running=False, completed_at=datetime.now())
+        except Exception as cleanup_err:
+            log_step(account_id, f"Failed to mark pipeline as failed: {cleanup_err}", "WARNING")
         raise
     finally:
         db.disconnect()
+        log_step(account_id, "PIPELINE THREAD EXITING", "INFO")
 
 
 from settings import settings
