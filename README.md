@@ -1,6 +1,6 @@
 # GSC Radar 🛰️
 
-**GSC Radar** is a professional SEO monitoring platform designed to detect significant search visibility anomalies and dispatch executive-grade alerts. Built for scale and reliability, it decouples data ingestion from alert delivery to ensure consistent performance in production environments.
+**GSC Radar** is a data-driven SEO monitoring platform that detects search visibility anomalies in Google Search Console and dispatches executive alerts via SendGrid. It is built as a set of decoupled services sharing a common PostgreSQL state layer.
 
 ---
 
@@ -54,7 +54,7 @@ The pipeline is designed to be executed as a recurring job (Cron). It performs a
 3. **Device Metrics**: Device-type breakdown.
 
 ### 2. Alert Dispatch Model (The Dispatcher)
-To prevent the pipeline from blocking on slow external networks (SMTP/API), the **Alert Dispatcher** runs as a separate worker process. It scans the `alerts` table for records marked `email_sent = false`, generates the multi-part HTML/Text payload, and dispatches via SendGrid.
+To prevent the pipeline from blocking on slow external networks, the **Alert Dispatcher** runs as a separate worker process. It scans the `alerts` table for records marked `email_sent = false`, generates the multi-part HTML/Text payload, and dispatches via SendGrid.
 
 ### 3. State Management & Scoping
 - **Persistence**: All metrics, accounts, and alerts are stored in PostgreSQL.

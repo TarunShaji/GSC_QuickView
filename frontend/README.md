@@ -1,54 +1,73 @@
-# GSC Radar Frontend 🛰️
+# GSC Radar – Frontend 🛰️
 
-The GSC Radar frontend is a professional-grade React SPA designed for SEO performance monitoring. It provides a highly interactive dashboard for visualizing GSC metrics and managing anomaly alerts.
-
----
-
-## 🏗️ Architecture & Flow
-
-### 1. SPA Routing & Fallbacks
-The frontend is built as a Single Page Application (SPA) using client-side routing.
-- **Production Note**: When deploying to a CDN or static host (Vercel, Netlify, Cloudflare), you **must** configure the server to catch-all and redirect all requested paths to `index.html`. This ensures that deep links to property pages (e.g., `/property/<uuid>`) resolve correctly after a page refresh.
-
-### 2. OAuth & Session Flow
-Authentication is managed via an account-scoped query parameter model:
-1. User clicks "Login with Google."
-2. Backend initiates OAuth flow and redirects back to the frontend.
-3. Frontend captures `account_id` and `email` from the URL.
-4. These identifiers are persisted in `LocalStorage` and managed via `AuthContext.tsx`.
-5. All subsequent API calls automatically inject the `account_id` as a query parameter.
+The GSC Radar frontend is a React-based Single Page Application (SPA) designed for high-performance visualization of Google Search Console analytics. It is a strictly client-side, stateless consumer of the GSC Radar Backend.
 
 ---
 
-## 🛠️ Configuration & Deployment
+## 🏗️ Technical Architecture
 
-### Environment Injection
-The frontend requires the backend API base URL at build time. This must be a professional, absolute URL (HTTPS recommended).
+### 1. File Registry & Module Responsibilities
 
+| File / Directory | Responsibility |
+| :--- | :--- |
+| **`App.tsx`** | **Core Router**: Manages the top-level application layout, routing logic (using React Router), and the main dashboard views. |
+| **`AuthProvider.tsx`** | **Session Orchestrator**: Manages the `AuthContext` state. It handles the extraction of `account_id` from URL params and maintains the reactive session state. |
+| **`AuthGate.tsx`** | **Security Interceptor**: A wrapper component that enforces authentication. It captures UUIDs from the onboarding redirect and commits them to `LocalStorage`. |
+| **`api.ts`** | **Service Layer**: Contains typed fetch implementations for all backend entities (Properties, Pages, Alerts, Pipeline). |
+| **`lib/apiClient.ts`** | **Base Client**: Configures the root `fetch` behavior, including base URL injection and automatic `account_id` parameter appending. |
+| **`types.ts`** | **Contract Registry**: Centralized TypeScript interfaces that exactly mirror the backend's Pydantic models to ensure type safety. |
+| **`components/`** | **View Layer**: Reusable UI components including `DashboardSummary`, `PropertyTable`, and `AlertList`. |
+| **`App.css` / `index.css`** | **Design System**: Global Tailwind CSS imports and curated HSL-based dark mode tokens. |
+
+---
+
+## 🔄 Session & State Model
+
+GSC Radar uses a **Stateless Hydration** model instead of traditional JWT or persistent Cookie-based login.
+
+### The `account_id` Lifecycle
+1.  **Handshake**: Upon successful Google login, the backend redirects to the frontend with `?account_id=UUID&email=user@domain.com`.
+2.  **Hydration**: The `AuthGate` component intercepts these parameters, validates the UUID format, and saves them to `LocalStorage`.
+3.  **Context Injection**: The `AuthProvider` reads from storage and populates the `AuthContext`.
+4.  **Request Decoration**: Every call in `api.ts` passes through `apiClient.ts`, which silently appends the `account_id` to the query string:
+    - `fetch('/api/properties')` -> `GET /api/properties?account_id=...`
+
+---
+
+## 🔌 Data Consumption Patterns
+
+### Resilience & Polling
+- **Pipeline Sync**: Because ingestion is long-running, the frontend uses a polling strategy on the `/api/pipeline/status` endpoint to update the UI progress bar.
+- **Dynamic Sorting**: To maintain a zero-fluff frontend, sorting and filtering are performed on the Backend/DB. The frontend simply re-fetches with new parameters.
+
+---
+
+## 🚀 Deployment & Build
+
+### Environment Configuration
+Required in `frontend/.env`:
 ```env
-# Create in frontend/.env
+# The absolute URL of your production backend API v1 root
 VITE_API_URL=https://api.yourdomain.com/api/v1
 ```
 
-### Build Pipeline
-1. **Target**: ESNext / Modern Browsers.
-2. **Build Tool**: Vite.
-3. **Command**: `npm run build`.
-4. **Output**: `dist/` - This directory contains the static production artifacts.
+### Production Workflow
+```bash
+npm install
+npm run build
+```
+The resulting `dist/` directory is a purely static bundle.
+
+### ⚠️ Critical: SPA Catch-All
+Since this application uses client-side routing, your hosting provider (Vercel, Netlify, Nginx) **MUST** be configured with a catch-all redirect to `index.html`.
+- **Nginx Example**: `try_files $uri /index.html;`
+- **Vercel Example**: Defined in `vercel.json` rewrites.
 
 ---
 
-## 📂 Data Ownership & Components
+## 🛡️ Implementation Realities (No-Fluff)
 
-- **`src/components/DashboardSummary.tsx`**: High-level portfolio overview. Handles the global "Sync" trigger.
-- **`src/components/PropertyDashboard.tsx`**: Deep-dive into specific properties with URL-level visibility tables.
-- **`src/lib/apiClient.ts`**: Centralized, robust wrapper for all `fetch` requests with built-in error handling and account-id injection.
-- **`src/types.ts`**: Strict TypeScript definitions aligned with backend model responses.
-
----
-
-## � Known Architectural Limitations
-
-- **State Persistence**: The application relies on URL parameters for initial session hydration and `LocalStorage` for continuity. There is no server-side session (JWT/Session Cookie) management in this architectural version.
-- **Real-time Pipeline Status**: The "Pipeline in Progress" state is polled via the API. There is no WebSocket or Server-Sent Events (SSE) implementation.
-- **Static Assets**: All branding assets (Radar icon, logos) are SVGs embedded in the component layer for zero-latency rendering.
+- **Execution**: Strictly stateless. Clearing your browser cache/LocalStorage is equivalent to a "Logout".
+- **Design**: Built with a "Mobile-First" responsive layout using Tailwind's layout engine.
+- **Dependencies**: Zero-dependency iconography using inline SVGs to minimize bundle size.
+- **Limitations**: No built-in Multi-Factor Auth (MFA) or RBAC (scoping is locked at the `account_id` layer).

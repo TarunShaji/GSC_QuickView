@@ -2,7 +2,7 @@ from __future__ import annotations
 """
 Alert Dispatcher Module
 Rebranded as GSC Radar
-Migrated from SMTP to SendGrid API
+Transactional Email via SendGrid API
 """
 
 import os
