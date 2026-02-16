@@ -29,14 +29,15 @@ SMTP_FROM_EMAIL=your_email@gmail.com
 
 ### 3. Install Dependencies
 ```bash
-cd src
-pip install -r ../requirements.txt
+cd backend
+pip install -r requirements.txt
 ```
 
 ### 4. Run API Server
-Start the FastAPI server using Uvicorn:
+Start the FastAPI server from the `backend/` directory:
 ```bash
-uvicorn api:app --reload
+cd backend
+python3 -m uvicorn src.api:app --reload
 ```
 The API documentation will be available at `http://localhost:8000/docs`.
 
@@ -45,7 +46,7 @@ The API documentation will be available at `http://localhost:8000/docs`.
 ### Alert Dispatcher (Cron)
 The tool uses a background dispatcher to send emails. It's recommended to run this via `cron` every 5 minutes:
 ```bash
-*/5 * * * * cd /path/to/src && /path/to/venv/bin/python3 alert_dispatcher.py >> ../logs/dispatcher.log 2>&1
+*/5 * * * * cd /path/to/backend && /path/to/venv/bin/python3 src/alert_dispatcher.py >> logs/dispatcher.log 2>&1
 ```
 
 ## 📂 Core Modules

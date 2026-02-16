@@ -125,7 +125,7 @@ export default function AlertsPage() {
                             {alerts.map((alert) => (
                                 <tr key={alert.id} className="hover:bg-gray-50 transition-colors">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {alert.site_url.replace(/^https?:\/\/[^/]+/, '') || alert.site_url}
+                                        {alert.site_url}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${alert.alert_type === 'critical'

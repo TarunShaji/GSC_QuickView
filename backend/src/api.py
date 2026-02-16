@@ -5,24 +5,24 @@ from fastapi import FastAPI, HTTPException, APIRouter
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Dict, List, Any, Optional
-from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
+from src.config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
 from fastapi.middleware.cors import CORSMiddleware
-from settings import settings
+from src.settings import settings
 
 # Import internal modules
-from main import run_pipeline
-from gsc_client import AuthError
-from auth_handler import GoogleAuthHandler
-from db_persistence import DatabasePersistence, init_db_pool, close_db_pool
+from src.main import run_pipeline
+from src.gsc_client import AuthError
+from src.auth_handler import GoogleAuthHandler
+from src.db_persistence import DatabasePersistence, init_db_pool, close_db_pool
 from concurrent.futures import ThreadPoolExecutor
-from page_visibility_analyzer import PageVisibilityAnalyzer
-from device_visibility_analyzer import DeviceVisibilityAnalyzer
-from utils.metrics import safe_delta_pct
-from utils.windows import get_most_recent_date, split_rows_by_window, aggregate_metrics
+from src.page_visibility_analyzer import PageVisibilityAnalyzer
+from src.device_visibility_analyzer import DeviceVisibilityAnalyzer
+from src.utils.metrics import safe_delta_pct
+from src.utils.windows import get_most_recent_date, split_rows_by_window, aggregate_metrics
 
 
 # -------------------------------------------------------------------------

@@ -12,6 +12,7 @@ export default function DashboardSummary() {
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus | null>(null);
     const [expandedWebsites, setExpandedWebsites] = useState<Set<string>>(new Set());
     const [expandedProperties, setExpandedProperties] = useState<Set<string>>(new Set());
 
@@ -22,6 +23,13 @@ export default function DashboardSummary() {
         try {
             const data = await api.dashboard.getSummary(accountId);
             setSummary(data);
+
+            // If not initialized, also fetch pipeline status once
+            if (data.status === 'not_initialized') {
+                const pStatus = await api.pipeline.getStatus(accountId);
+                setPipelineStatus(pStatus);
+            }
+
             // Auto-expand first website if no websites are currently expanded
             if (data.websites && data.websites.length > 0) {
                 setExpandedWebsites(prev => prev.size === 0 ? new Set([data.websites[0].website_id]) : prev);
@@ -34,9 +42,32 @@ export default function DashboardSummary() {
         }
     }, [accountId]);
 
+    const fetchPipelineStatus = useCallback(async () => {
+        if (!accountId) return;
+        try {
+            const data = await api.pipeline.getStatus(accountId);
+            setPipelineStatus(data);
+
+            // If pipeline just finished, refresh summary
+            if (pipelineStatus?.is_running && !data.is_running && !data.error) {
+                fetchSummary();
+            }
+        } catch (err) {
+            console.error('Failed to fetch pipeline status:', err);
+        }
+    }, [accountId, pipelineStatus, fetchSummary]);
+
     useEffect(() => {
         fetchSummary(true);
     }, [fetchSummary]);
+
+    // Poll pipeline status if not initialized
+    useEffect(() => {
+        if (!accountId || summary?.status !== 'not_initialized') return;
+
+        const interval = setInterval(fetchPipelineStatus, 5000);
+        return () => clearInterval(interval);
+    }, [accountId, summary, fetchPipelineStatus]);
 
     const handleRunPipeline = async () => {
         if (!accountId) return;
@@ -134,69 +165,103 @@ export default function DashboardSummary() {
     if (summary?.status === 'not_initialized') {
         return (
             <>
-                <PipelineBanner onSuccess={fetchSummary} />
-                <div className="space-y-4">
-                    <div className="flex justify-between items-center mb-6">
+                <div className="space-y-6">
+                    <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-6">
                         <div className="flex items-center gap-6">
-                            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-                            <nav className="flex gap-4">
-                                <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg">
+                            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Portfolio Overview</h1>
+                            <nav className="flex gap-1">
+                                <button className="px-4 py-2 text-sm font-semibold text-gray-900 border-b-2 border-gray-900">
                                     Dashboard
                                 </button>
                                 <button
                                     onClick={() => navigate('/alerts')}
-                                    className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                                    className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 rounded-md transition-colors"
                                 >
                                     Alerts
                                 </button>
                                 <button
                                     onClick={() => navigate('/settings')}
-                                    className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                                    className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 rounded-md transition-colors"
                                 >
                                     Settings
                                 </button>
                             </nav>
                         </div>
-                    </div>
+                    </header>
+
+                    <PipelineBanner />
 
                     <div className="text-center py-20">
-                        <div className="bg-slate-800 rounded-2xl p-12 max-w-xl mx-auto border border-slate-700 shadow-2xl">
-                            <div className="text-7xl mb-6 animate-bounce">🚀</div>
-                            <h2 className="text-3xl font-bold text-white mb-4">
-                                Welcome to GSC Quick View
+                        <div className="bg-white rounded-lg p-12 max-w-xl mx-auto border border-gray-200 shadow-sm">
+                            <div className={`text-6xl mb-8 ${pipelineStatus?.is_running ? 'animate-spin' : 'animate-pulse'}`}>
+                                {pipelineStatus?.is_running ? '🌀' : '⚙️'}
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-4 tracking-tight">
+                                {pipelineStatus?.is_running ? 'Sync in Progress' : 'Welcome to GSC Quick View'}
                             </h2>
-                            <p className="text-lg text-slate-400 mb-10 leading-relaxed">
-                                {summary.message || 'Your account is connected. Now let\'s fetch and analyze your Search Console data to build your first dashboard.'}
+                            <p className="text-base text-gray-500 mb-10 leading-relaxed font-medium">
+                                {pipelineStatus?.is_running
+                                    ? `Step: ${pipelineStatus.current_step}...`
+                                    : summary.message || 'Connected to Search Console. Press start to fetch and analyze your property data.'}
                             </p>
 
                             {error && (
-                                <div className="mb-6 px-4 py-3 bg-red-900/30 border border-red-500/50 text-red-200 rounded-lg text-sm">
+                                <div className="mb-6 px-4 py-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold uppercase tracking-widest">
                                     {error}
                                 </div>
                             )}
 
-                            <button
-                                onClick={handleRunPipeline}
-                                disabled={isStarting}
-                                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold py-4 px-8 rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-3 shadow-lg shadow-blue-900/20"
-                            >
-                                {isStarting ? (
-                                    <>
-                                        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
-                                        Starting...
-                                    </>
-                                ) : (
-                                    <>
-                                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        Run Initial Pipeline
-                                    </>
-                                )}
-                            </button>
+                            {pipelineStatus?.is_running ? (
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center mb-1.5">
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">System Progress</span>
+                                        <span className="text-xs font-black text-gray-900">
+                                            {pipelineStatus.progress_total > 0
+                                                ? Math.round((pipelineStatus.progress_current / pipelineStatus.progress_total) * 100)
+                                                : 0}%
+                                        </span>
+                                    </div>
+                                    <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                        <div
+                                            className="h-full bg-gray-900 transition-all duration-1000 ease-out"
+                                            style={{
+                                                width: `${pipelineStatus.progress_total > 0
+                                                    ? (pipelineStatus.progress_current / pipelineStatus.progress_total) * 100
+                                                    : 0}%`
+                                            }}
+                                        />
+                                    </div>
+                                    <button
+                                        disabled
+                                        className="w-full bg-gray-100 text-gray-400 font-bold py-4 px-8 rounded-lg flex items-center justify-center gap-3 text-xs uppercase tracking-[0.2em]"
+                                    >
+                                        Pipeline Running...
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={handleRunPipeline}
+                                    disabled={isStarting}
+                                    className="w-full bg-gray-900 hover:bg-black disabled:bg-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all flex items-center justify-center gap-3 shadow-sm text-xs uppercase tracking-[0.2em]"
+                                >
+                                    {isStarting ? (
+                                        <>
+                                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-t-white"></div>
+                                            Initiating Sync...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            Run Initial Pipeline
+                                        </>
+                                    )}
+                                </button>
+                            )}
 
-                            <p className="mt-6 text-slate-500 text-sm">
+                            <p className="mt-8 text-gray-400 text-[10px] font-bold uppercase tracking-widest leading-relaxed">
                                 This will sync your properties and analyze the last 14 days of data.
                             </p>
                         </div>

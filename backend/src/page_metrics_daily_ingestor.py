@@ -10,7 +10,7 @@ Data: Single day (today-2)
 
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
-from db_persistence import DatabasePersistence
+from src.db_persistence import DatabasePersistence
 
 
 class PageMetricsDailyIngestor:

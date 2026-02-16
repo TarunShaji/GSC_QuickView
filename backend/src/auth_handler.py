@@ -4,10 +4,10 @@ from typing import Dict, Any, Tuple
 from google_auth_oauthlib.flow import Flow
 from google.oauth2 import id_token
 from google.auth.transport import requests
-from db_persistence import DatabasePersistence
+from src.db_persistence import DatabasePersistence
 
-from settings import settings
-from auth.token_model import GSCAuthToken
+from src.settings import settings
+from src.auth.token_model import GSCAuthToken
 
 
 # Scopes required for GSC and Identity

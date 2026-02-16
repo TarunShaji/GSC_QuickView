@@ -3,18 +3,18 @@ GSC Quick View - Sequential Ingestion + Parallel Analysis
 Multi-Account Aware
 """
 
-from gsc_client import GSCClient, AuthError
+from src.gsc_client import GSCClient, AuthError
 
-from utils.urls import extract_base_domain
-from db_persistence import DatabasePersistence, init_db_pool, close_db_pool
-from property_metrics_daily_ingestor import PropertyMetricsDailyIngestor
-from page_metrics_daily_ingestor import PageMetricsDailyIngestor
-from device_metrics_daily_ingestor import DeviceMetricsDailyIngestor
-from page_visibility_analyzer import PageVisibilityAnalyzer
-from device_visibility_analyzer import DeviceVisibilityAnalyzer
-from alert_detector import detect_alerts_for_all_properties
+from src.utils.urls import extract_base_domain
+from src.db_persistence import DatabasePersistence, init_db_pool, close_db_pool
+from src.property_metrics_daily_ingestor import PropertyMetricsDailyIngestor
+from src.page_metrics_daily_ingestor import PageMetricsDailyIngestor
+from src.device_metrics_daily_ingestor import DeviceMetricsDailyIngestor
+from src.page_visibility_analyzer import PageVisibilityAnalyzer
+from src.device_visibility_analyzer import DeviceVisibilityAnalyzer
+from src.alert_detector import detect_alerts_for_all_properties
 from datetime import datetime, timedelta
-from config.date_windows import GSC_LAG_DAYS, INGESTION_WINDOW_DAYS, DAILY_INGEST_DAYS
+from src.config.date_windows import GSC_LAG_DAYS, INGESTION_WINDOW_DAYS, DAILY_INGEST_DAYS
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, List, Dict, Any
 
@@ -285,7 +285,7 @@ def run_pipeline(account_id: str, run_id: Optional[str] = None):
         log_step(account_id, "PIPELINE THREAD EXITING", "INFO")
 
 
-from settings import settings
+from src.settings import settings
 
 def main():
     """CLI Entrypoint for testing - runs the first account found in DB"""

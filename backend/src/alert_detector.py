@@ -12,8 +12,8 @@ Logic:
 
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from utils.metrics import safe_delta_pct
-from utils.windows import get_most_recent_date, split_rows_by_window, aggregate_metrics
+from src.utils.metrics import safe_delta_pct
+from src.utils.windows import get_most_recent_date, split_rows_by_window, aggregate_metrics
 
 
 def log_alert(message: str):

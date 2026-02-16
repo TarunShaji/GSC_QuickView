@@ -9,7 +9,7 @@ import smtplib
 from email.message import EmailMessage
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from settings import settings
+from src.settings import settings
 
 
 def log_dispatcher(message: str, account_email: Optional[str] = None):
@@ -179,7 +179,7 @@ def main():
     
     try:
         # Import and connect to database
-        from db_persistence import DatabasePersistence, init_db_pool, close_db_pool
+        from src.db_persistence import DatabasePersistence, init_db_pool, close_db_pool
         
         # Initialize pool for Cron process using centralized settings
         init_db_pool(settings.DATABASE_URL, minconn=1, maxconn=5)
@@ -218,9 +218,10 @@ if __name__ == "__main__":
     Standalone execution entry point.
     
     Usage:
-        python alert_dispatcher.py
+        cd backend
+        python src/alert_dispatcher.py
     
     Cron setup:
-        */5 * * * * cd /Users/tarunshaji/gsc_quickview && source venv/bin/activate && python src/alert_dispatcher.py >> logs/dispatcher.log 2>&1
+        */5 * * * * cd /Users/tarunshaji/gsc_quickview/backend && source venv/bin/activate && python src/alert_dispatcher.py >> logs/dispatcher.log 2>&1
     """
     main()

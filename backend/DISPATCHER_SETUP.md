@@ -20,7 +20,7 @@ Cron → alert_dispatcher.py → Send emails → UPDATE (email_sent=true)
 First, verify the dispatcher works independently:
 
 ```bash
-cd /Users/tarunshaji/gsc_quickview
+cd /Users/tarunshaji/gsc_quickview/backend
 source venv/bin/activate
 python src/alert_dispatcher.py
 ```
@@ -54,7 +54,7 @@ python src/alert_dispatcher.py
 ## 2. Create Logs Directory
 
 ```bash
-cd /Users/tarunshaji/gsc_quickview
+cd /Users/tarunshaji/gsc_quickview/backend
 mkdir -p logs
 ```
 
@@ -71,12 +71,12 @@ crontab -e
 ### Add this line:
 
 ```cron
-*/5 * * * * cd /Users/tarunshaji/gsc_quickview && source venv/bin/activate && python src/alert_dispatcher.py >> logs/dispatcher.log 2>&1
+*/5 * * * * cd /Users/tarunshaji/gsc_quickview/backend && source venv/bin/activate && python src/alert_dispatcher.py >> logs/dispatcher.log 2>&1
 ```
 
 **What this does:**
 - `*/5 * * * *` - Run every 5 minutes
-- `cd /Users/tarunshaji/gsc_quickview` - Change to project directory
+- `cd /Users/tarunshaji/gsc_quickview/backend` - Change to backend directory
 - `source venv/bin/activate` - Activate virtual environment
 - `python src/alert_dispatcher.py` - Run dispatcher
 - `>> logs/dispatcher.log 2>&1` - Append all output to log file
@@ -105,19 +105,19 @@ You should see your dispatcher line.
 ### View real-time logs:
 
 ```bash
-tail -f /Users/tarunshaji/gsc_quickview/logs/dispatcher.log
+tail -f /Users/tarunshaji/gsc_quickview/backend/logs/dispatcher.log
 ```
 
 ### Check recent runs:
 
 ```bash
-tail -50 /Users/tarunshaji/gsc_quickview/logs/dispatcher.log
+tail -50 /Users/tarunshaji/gsc_quickview/backend/logs/dispatcher.log
 ```
 
 ### Filter for errors:
 
 ```bash
-grep "❌" /Users/tarunshaji/gsc_quickview/logs/dispatcher.log
+grep "❌" /Users/tarunshaji/gsc_quickview/backend/logs/dispatcher.log
 ```
 
 ---
@@ -142,7 +142,7 @@ cat src/.env | grep SMTP
 
 2. Test dispatcher manually:
 ```bash
-cd /Users/tarunshaji/gsc_quickview
+cd /Users/tarunshaji/gsc_quickview/backend
 source venv/bin/activate
 python src/alert_dispatcher.py
 ```
@@ -160,7 +160,7 @@ LIMIT 10;
 Use absolute paths in crontab:
 
 ```cron
-*/5 * * * * /Users/tarunshaji/gsc_quickview/venv/bin/python /Users/tarunshaji/gsc_quickview/src/alert_dispatcher.py >> /Users/tarunshaji/gsc_quickview/logs/dispatcher.log 2>&1
+*/5 * * * * /Users/tarunshaji/gsc_quickview/backend/venv/bin/python /Users/tarunshaji/gsc_quickview/backend/src/alert_dispatcher.py >> /Users/tarunshaji/gsc_quickview/backend/logs/dispatcher.log 2>&1
 ```
 
 ---

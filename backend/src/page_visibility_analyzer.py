@@ -20,10 +20,10 @@ import os
 from datetime import datetime, timedelta
 from collections import defaultdict
 from typing import Dict, List, Any, Set, Tuple
-from db_persistence import DatabasePersistence
-from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
-from utils.metrics import safe_delta_pct
-from utils.windows import get_most_recent_date, split_rows_by_window, aggregate_metrics
+from src.db_persistence import DatabasePersistence
+from src.config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
+from src.utils.metrics import safe_delta_pct
+from src.utils.windows import get_most_recent_date, split_rows_by_window, aggregate_metrics
 
 
 class PageVisibilityAnalyzer:

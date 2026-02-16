@@ -7,8 +7,8 @@ from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 from datetime import datetime
 import json
-from auth.token_model import GSCAuthToken
-from config.date_windows import GSC_LAG_DAYS, ANALYSIS_WINDOW_DAYS, INGESTION_WINDOW_DAYS
+from src.auth.token_model import GSCAuthToken
+from src.config.date_windows import GSC_LAG_DAYS, ANALYSIS_WINDOW_DAYS, INGESTION_WINDOW_DAYS
 
 # Load environment variables
 load_dotenv()

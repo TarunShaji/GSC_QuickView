@@ -1,7 +1,7 @@
 """
-Device Metrics Daily Ingestor
+Property Metrics Daily Ingestor
 
-Lightweight daily ingestion of device-level metrics (single day only).
+Lightweight daily ingestion of property-level (site-wide) metrics.
 This runs automatically as part of the main pipeline.
 
 API Cost: ~26 API calls per day (one per property)
@@ -10,11 +10,11 @@ Data: Single day (today-2)
 
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
-from db_persistence import DatabasePersistence
+from src.db_persistence import DatabasePersistence
 
 
-class DeviceMetricsDailyIngestor:
-    """Handles daily incremental ingestion of device-level metrics"""
+class PropertyMetricsDailyIngestor:
+    """Handles daily incremental ingestion of property-level metrics"""
     
     def __init__(self, gsc_service, db: DatabasePersistence):
         self.service = gsc_service
@@ -22,7 +22,7 @@ class DeviceMetricsDailyIngestor:
     
     def ingest_property(self, property_data: Dict[str, Any], start_date: datetime.date, end_date: datetime.date) -> Dict[str, int]:
         """
-        Fetch device metrics for a date range for a single property.
+        Fetch property metrics for a date range for a single property.
         
         Args:
             property_data: Dict with 'id', 'site_url', 'base_domain'
@@ -36,13 +36,14 @@ class DeviceMetricsDailyIngestor:
         site_url = property_data['site_url']
         base_domain = property_data['base_domain']
         
-        print(f"[INGEST] Device Metrics: {base_domain} ({start_date} to {end_date})")
+        print(f"[INGEST] Property Metrics: {base_domain} ({start_date} to {end_date})")
         
         # Build Search Analytics API request
+        # dimensions=['date'] is CRITICAL for range ingestion to get daily rows
         request_body = {
             'startDate': start_date.strftime('%Y-%m-%d'),
             'endDate': end_date.strftime('%Y-%m-%d'),
-            'dimensions': ['device', 'date'],
+            'dimensions': ['date'], 
             'rowLimit': 25000
         }
         
@@ -54,7 +55,7 @@ class DeviceMetricsDailyIngestor:
             ).execute()
             
             rows = response.get('rows', [])
-            print(f"  -> GSC returned {len(rows)} device-date rows")
+            print(f"  -> GSC returned {len(rows)} daily rows")
             
             if not rows:
                 return {
@@ -63,31 +64,29 @@ class DeviceMetricsDailyIngestor:
                     'rows_updated': 0
                 }
             
+            total_inserted = 0
+            total_updated = 0
+            
             # Transform API response to database format
-            device_metrics = []
+            property_metrics = []
             for row in rows:
-                keys = row.get('keys', [])
-                if len(keys) != 2:
-                    continue
+                # keys[0] is the date string
+                row_date = row['keys'][0]
                 
-                device = keys[0].lower() # Normalize to lowercase
-                date_str = keys[1]
-                
-                device_metrics.append({
-                    'device': device,
-                    'date': date_str,
+                property_metrics.append({
+                    'date': row_date,
                     'clicks': row.get('clicks', 0),
                     'impressions': row.get('impressions', 0),
                     'ctr': row.get('ctr', 0.0),
                     'position': row.get('position', 0.0)
                 })
-
+            
             # Persist to database
             self.db.begin_transaction()
-            counts = self.db.persist_device_metrics(property_id, device_metrics)
+            counts = self.db.persist_property_metrics(property_id, property_metrics)
             self.db.commit_transaction()
             
-            print(f"  -> Device metrics finish: {counts['inserted']} inserted, {counts['updated']} updated")
+            print(f"  -> Property metrics finish: {counts['inserted']} inserted, {counts['updated']} updated")
             
             return {
                 'rows_fetched': len(rows),
@@ -97,5 +96,5 @@ class DeviceMetricsDailyIngestor:
         
         except Exception as e:
             self.db.rollback_transaction()
-            print(f"  ✗ Device metrics error for {site_url}: {e}")
+            print(f"  ✗ Property metrics error for {site_url}: {e}")
             raise

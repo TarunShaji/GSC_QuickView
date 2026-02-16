@@ -5,7 +5,7 @@ Handles date anchoring, split/aggregation, and canonical windows for consistent 
 
 from datetime import date, timedelta
 from typing import Dict, List, Any, Tuple
-from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
+from src.config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 
 def get_most_recent_date(rows: List[Dict[str, Any]]) -> date:
     """Find the most recent date in a list of metric rows."""

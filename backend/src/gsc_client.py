@@ -11,8 +11,8 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
-from settings import settings
-from auth.token_model import GSCAuthToken
+from src.settings import settings
+from src.auth.token_model import GSCAuthToken
 
 
 class AuthError(Exception):
