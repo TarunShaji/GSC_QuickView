@@ -10,6 +10,7 @@ import smtplib
 from email.message import EmailMessage
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+from src.page_visibility_analyzer import PageVisibilityAnalyzer
 from src.settings import settings
 
 
