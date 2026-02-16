@@ -29,12 +29,9 @@ class Settings(BaseSettings):
     # CORS
     ALLOWED_ORIGINS_STR: str = "http://localhost:5173"
 
-    # SMTP Configuration
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM_EMAIL: str = ""
+    # SendGrid Configuration
+    SENDGRID_API_KEY: str
+    SENDGRID_FROM_EMAIL: str
 
     @property
     def GOOGLE_REDIRECT_URI(self) -> str:

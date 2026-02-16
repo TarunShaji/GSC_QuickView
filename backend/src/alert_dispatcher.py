@@ -1,17 +1,20 @@
 from __future__ import annotations
 """
 Alert Dispatcher Module
-Multi-Account Aware
+Rebranded as GSC Radar
+Migrated from SMTP to SendGrid API
 """
 
 import os
 import time
-import socket
 import traceback
-import smtplib
-from email.message import EmailMessage
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+
+# SendGrid SDK
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
+
 from src.page_visibility_analyzer import PageVisibilityAnalyzer
 from src.settings import settings
 
@@ -21,36 +24,6 @@ def log_dispatcher(message: str, account_email: Optional[str] = None):
     timestamp = datetime.now().strftime("%H:%M:%S")
     account_prefix = f" [ACCOUNT: {account_email}]" if account_email else ""
     print(f"[{timestamp}] [DISPATCHER]{account_prefix} {message}")
-
-
-def test_smtp_connectivity(host: str, port: int) -> bool:
-    """
-    Perform deep network diagnostics for SMTP connectivity.
-    Logs DNS resolution and raw TCP socket connection.
-    """
-    log_dispatcher(f"[SMTP-DIAG] Starting network probe for {host}:{port}")
-    
-    # 1. DNS Resolution
-    try:
-        log_dispatcher(f"[SMTP-DIAG] Resolving DNS for {host}...")
-        ip_address = socket.gethostbyname(host)
-        log_dispatcher(f"[SMTP-DIAG] ✅ DNS resolved: {host} -> {ip_address}")
-    except Exception:
-        log_dispatcher(f"[SMTP-DIAG] ❌ DNS Resolution FAILED for {host}")
-        log_dispatcher(traceback.format_exc())
-        return False
-
-    # 2. Raw TCP Socket Connection
-    try:
-        log_dispatcher(f"[SMTP-DIAG] Attempting raw TCP connect to {ip_address}:{port}...")
-        sock = socket.create_connection((host, port), timeout=10)
-        log_dispatcher(f"[SMTP-DIAG] ✅ TCP Socket connection SUCCESSFUL to {host}:{port}")
-        sock.close()
-        return True
-    except Exception:
-        log_dispatcher(f"[SMTP-DIAG] ❌ TCP Socket connection FAILED to {host}:{port}")
-        log_dispatcher(traceback.format_exc())
-        return False
 
 
 def fetch_seo_health_summary(account_id: str, property_id: str, db) -> Dict[str, Any]:
@@ -124,28 +97,29 @@ SEO Health Summary:
         for url in seo_health['lost_pages']:
             body += f"- {url.replace(site_url.rstrip('/'), '') or '/'}\n"
     
-    body += "\nThis alert was generated automatically.\n"
+    body += "\nThis alert was generated automatically by GSC Radar.\n"
     return body
 
 
-def create_email_message(account_id: str, alert: Dict[str, Any], recipients: List[str], db) -> EmailMessage:
-    """Create email message for an alert"""
-    subject = f"[SEO Alert] Impressions dropped by {abs(alert['delta_pct']):.1f}%"
+def create_sendgrid_message(account_id: str, alert: Dict[str, Any], recipients: List[str], db) -> Mail:
+    """Create SendGrid Mail object for an alert"""
+    subject = f"[GSC Radar Alert] Impressions dropped by {abs(alert['delta_pct']):.1f}%"
     body = generate_email_body(account_id, alert, db)
     
-    msg = EmailMessage()
-    msg['Subject'] = subject
-    msg['From'] = settings.SMTP_FROM_EMAIL
-    msg['To'] = ', '.join(recipients)
-    msg.set_content(body)
-    return msg
+    message = Mail(
+        from_email=settings.SENDGRID_FROM_EMAIL,
+        to_emails=recipients,
+        subject=subject,
+        plain_text_content=body
+    )
+    return message
 
 
 def dispatch_pending_alerts(db) -> Dict[str, int]:
     """
-    Dispatcher - Iterates through all accounts and sends pending alerts.
+    Dispatcher - Iterates through all accounts and sends pending alerts via SendGrid API.
     """
-    log_dispatcher("Starting multi-account alert dispatcher")
+    log_dispatcher("Starting multi-account alert dispatcher (SendGrid Mode)")
     
     # 1. Fetch all accounts
     accounts = db.fetch_all_accounts()
@@ -157,21 +131,9 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
     failed_count = 0
 
     try:
-        # Pre-connection network check
-        test_smtp_connectivity(settings.SMTP_HOST, settings.SMTP_PORT)
-
-        # 3. Open SINGLE SMTP connection with deep diagnostics
-        log_dispatcher(f"[SMTP-DIAG] Initializing smtplib.SMTP with {settings.SMTP_HOST}:{settings.SMTP_PORT}...")
-        server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30)
-        log_dispatcher("[SMTP-DIAG] ✅ SMTP Object initialized")
-        
-        log_dispatcher("[SMTP-DIAG] Attempting STARTTLS upgrade...")
-        server.starttls()
-        log_dispatcher("[SMTP-DIAG] ✅ TLS handshake successful")
-        
-        log_dispatcher(f"[SMTP-DIAG] Attempting SMTP Login for {settings.SMTP_USER}...")
-        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-        log_dispatcher("✅ SMTP connection authenticated")
+        # Initialize SendGrid Client
+        log_dispatcher("[SENDGRID] Initializing client...")
+        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
 
         for acc in accounts:
             account_id = acc['id']
@@ -192,23 +154,29 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
 
             for alert in pending:
                 try:
-                    msg = create_email_message(account_id, alert, recipients, db)
-                    log_dispatcher(f"[SMTP-DIAG] Attempting to send message for {alert['site_url']}...", account_email)
-                    server.send_message(msg)
-                    db.mark_alert_email_sent(alert['id'])
-                    sent_count += 1
-                    log_dispatcher(f"✅ Alert sent for {alert['site_url']}", account_email)
-                    time.sleep(1) # Throttle
+                    mail = create_sendgrid_message(account_id, alert, recipients, db)
+                    log_dispatcher(f"[SENDGRID] Sending email for property: {alert['site_url']}", account_email)
+                    
+                    response = sg.send(mail)
+                    
+                    # SendGrid returns 202 Accepted on success
+                    if response.status_code == 202:
+                        db.mark_alert_email_sent(alert['id'])
+                        sent_count += 1
+                        log_dispatcher(f"✅ [SENDGRID] Status code: 202 (Success)", account_email)
+                    else:
+                        log_dispatcher(f"❌ [SENDGRID] FAILED with status: {response.status_code}", account_email)
+                        log_dispatcher(f"Response Body: {response.body}", account_email)
+                        failed_count += 1
+                        
+                    time.sleep(0.5) # Slight throttle for API rate limits
                 except Exception:
-                    log_dispatcher(f"❌ [SMTP-DIAG] Failed to send alert for {alert['site_url']}", account_email)
+                    log_dispatcher(f"❌ [SENDGRID] Incident error occurred for {alert['site_url']}", account_email)
                     log_dispatcher(traceback.format_exc())
                     failed_count += 1
 
-        server.quit()
-        log_dispatcher("SMTP connection closed")
-        
     except Exception:
-        log_dispatcher(f"❌ [SMTP-DIAG] Fatal SMTP error occurred")
+        log_dispatcher(f"❌ [SENDGRID] Fatal SendGrid error occurred")
         log_dispatcher(traceback.format_exc())
         return {'sent': sent_count, 'failed': failed_count + 1}
 
@@ -219,7 +187,7 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
 def main():
     """CLI Entrypoint for cron"""
     log_dispatcher("=" * 60)
-    log_dispatcher("Alert Dispatcher Started (Cron Mode)")
+    log_dispatcher("GSC Radar Alert Dispatcher Started (SendGrid API)")
     log_dispatcher("=" * 60)
     
     db = None
@@ -261,14 +229,4 @@ def main():
 
 
 if __name__ == "__main__":
-    """
-    Standalone execution entry point.
-    
-    Usage:
-        cd backend
-        python src/alert_dispatcher.py
-    
-    Cron setup:
-        */5 * * * * cd /Users/tarunshaji/gsc_quickview/backend && source venv/bin/activate && python src/alert_dispatcher.py >> logs/dispatcher.log 2>&1
-    """
     main()
