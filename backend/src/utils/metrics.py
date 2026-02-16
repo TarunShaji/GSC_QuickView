@@ -1,7 +1,5 @@
 from __future__ import annotations
-"""
-Centralized metrics utilities for GSC Quick View
-"""
+"""Centralized metrics utilities for GSC Radar"""
 
 def safe_delta_pct(current: float, previous: float) -> float:
     """

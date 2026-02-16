@@ -1,214 +1,73 @@
-# Alert Dispatcher Cron Setup Guide
+# Alert Dispatcher Operational Guide (GSC Radar)
 
-## Overview
+The **Alert Dispatcher** is a decoupled, transactional worker responsible for converting raw anomaly data into professional SaaS-style HTML communications. It is designed for high reliability, idempotency, and minimal operational overhead.
 
-The alert dispatcher is now a **completely independent process** that runs separately from the pipeline via cron.
+---
 
-**Architecture:**
-```
-Pipeline → Detect alerts → INSERT alerts (email_sent=false) → Exit fast
+## ⚙️ Operational Workflow
 
-(5 minutes later)
+The dispatcher operates on a "Fetch-Enrich-Send" cycle, completely independent of the data ingestion pipeline.
 
-Cron → alert_dispatcher.py → Send emails → UPDATE (email_sent=true)
+```bash
+1. Scan `alerts` where `email_sent = false`
+2. Enrich property metadata from DB
+3. Calculate dynamic 7v7 date windows from `metrics` table
+4. Generate Multi-Part (HTML + Plain Text) payload
+5. Dispatch via SendGrid API (HTTPS/443)
+6. Atomic COMMIT: Update `alerts` set `email_sent = true`
 ```
 
 ---
 
-## 1. Test Standalone Execution
+## 🚀 Deployment & Cron
 
-First, verify the dispatcher works independently:
-
+### Manual Verification
+Execute via the module interface to ensure correct path resolution:
 ```bash
-cd /Users/tarunshaji/gsc_quickview/backend
-source venv/bin/activate
-python src/alert_dispatcher.py
+python -m src.alert_dispatcher
 ```
 
-**Expected output:**
-```
-[21:30:00] [DISPATCHER] ============================================================
-[21:30:00] [DISPATCHER] Alert Dispatcher Started (Cron Mode)
-[21:30:00] [DISPATCHER] ============================================================
-[21:30:00] [DISPATCHER] Database connection established
-[21:30:00] [DISPATCHER] Starting alert dispatcher
-[21:30:00] [DISPATCHER] Found 3 pending alert(s)
-[21:30:00] [DISPATCHER] Opening SMTP connection to smtp.gmail.com:587
-[21:30:01] [DISPATCHER] ✅ SMTP connection established and authenticated
-[21:30:01] [DISPATCHER] Processing alert 1/3 for amouage.com
-[21:30:01] [DISPATCHER]   → Sent to user@example.com
-[21:30:01] [DISPATCHER] ✅ Alert abc123... sent successfully
-...
-[21:30:10] [DISPATCHER] SMTP connection closed
-[21:30:10] [DISPATCHER] ============================================================
-[21:30:10] [DISPATCHER] Dispatcher complete: 3 sent, 0 failed
-[21:30:10] [DISPATCHER] ============================================================
-[21:30:10] [DISPATCHER] Summary: 3 sent, 0 failed, 3 total
-[21:30:10] [DISPATCHER] ============================================================
-[21:30:10] [DISPATCHER] Exiting successfully
-[21:30:10] [DISPATCHER] Database connection closed
-```
-
----
-
-## 2. Create Logs Directory
-
-```bash
-cd /Users/tarunshaji/gsc_quickview/backend
-mkdir -p logs
-```
-
----
-
-## 3. Set Up Cron Job
-
-### Edit crontab
-
-```bash
-crontab -e
-```
-
-### Add this line:
+### Production Cron Setup
+For high-signal alerting, recommended execution is every **5 to 15 minutes**.
 
 ```cron
-*/5 * * * * cd /Users/tarunshaji/gsc_quickview/backend && source venv/bin/activate && python src/alert_dispatcher.py >> logs/dispatcher.log 2>&1
-```
-
-**What this does:**
-- `*/5 * * * *` - Run every 5 minutes
-- `cd /Users/tarunshaji/gsc_quickview/backend` - Change to backend directory
-- `source venv/bin/activate` - Activate virtual environment
-- `python src/alert_dispatcher.py` - Run dispatcher
-- `>> logs/dispatcher.log 2>&1` - Append all output to log file
-
-### Save and exit
-
-- **Vim**: Press `Esc`, then `:wq`, then `Enter`
-- **Nano**: Press `Ctrl+X`, then `Y`, then `Enter`
-
----
-
-## 4. Verify Cron Job
-
-Check if cron job was added:
-
-```bash
-crontab -l
-```
-
-You should see your dispatcher line.
-
----
-
-## 5. Monitor Dispatcher
-
-### View real-time logs:
-
-```bash
-tail -f /Users/tarunshaji/gsc_quickview/backend/logs/dispatcher.log
-```
-
-### Check recent runs:
-
-```bash
-tail -50 /Users/tarunshaji/gsc_quickview/backend/logs/dispatcher.log
-```
-
-### Filter for errors:
-
-```bash
-grep "❌" /Users/tarunshaji/gsc_quickview/backend/logs/dispatcher.log
+# Example crontab entry (*/5)
+*/5 * * * * cd /path/to/project/backend && ./venv/bin/python -m src.alert_dispatcher >> logs/dispatcher.log 2>&1
 ```
 
 ---
 
-## 6. Troubleshooting
+## 🛡️ Reliability & Resilience
 
-### Cron not running?
+### 1. Idempotency Guarantee
+The dispatcher uses a strict **State-First Update** model. Records are only marked as `email_sent = true` upon a 202 "Accepted" response from the SendGrid API. If a crash occurs mid-execution, unsent alerts remain pending and will be picked up by the next run, ensuring zero lost alerts.
 
-Check cron service status (macOS):
+### 2. Failure Modes & Retries
+- **API Connectivity Loss**: If the SendGrid API is unreachable, the dispatcher exits with a non-zero code. No state is mutated in the DB, allowing for a clean retry on the next cron cycle.
+- **Database Latency**: The dispatcher uses short-lived connections to prevent holding locks during long API wait times.
 
+### 3. Concurrency Safety
+The dispatcher is safe to run concurrently across multiple instances (e.g. if a previous cron job hangs). The database handles row-level locking or atomic updates to prevent duplicate dispatches for the same alert ID.
+
+---
+
+## 🔍 Troubleshooting
+
+### Monitoring Output
+Successful runs will produce high-signal logs:
+- `[SENDGRID] Sending HTML alert for property: <name>`
+- `[DISPATCHER] ✅ [SENDGRID] Status code: 202 (Success)`
+
+### Error Inspection
+Search for the ❌ emoji in your log files to identify dispatch failures:
 ```bash
-# macOS uses launchd, not traditional cron
-# Verify permissions in System Settings > Privacy & Security > Full Disk Access
-```
-
-### Emails not sending?
-
-1. Check SMTP config in `.env`:
-```bash
-cat src/.env | grep SMTP
-```
-
-2. Test dispatcher manually:
-```bash
-cd /Users/tarunshaji/gsc_quickview/backend
-source venv/bin/activate
-python src/alert_dispatcher.py
-```
-
-3. Check database for pending alerts:
-```sql
-SELECT id, site_url, email_sent, triggered_at
-FROM alerts
-ORDER BY triggered_at DESC
-LIMIT 10;
-```
-
-### Path issues?
-
-Use absolute paths in crontab:
-
-```cron
-*/5 * * * * /Users/tarunshaji/gsc_quickview/backend/venv/bin/python /Users/tarunshaji/gsc_quickview/backend/src/alert_dispatcher.py >> /Users/tarunshaji/gsc_quickview/backend/logs/dispatcher.log 2>&1
+grep "❌" backend/logs/dispatcher.log
 ```
 
 ---
 
-## 7. Stopping the Cron Job
+## 🔍 Known Architectural Limitations
 
-To disable:
-
-```bash
-crontab -e
-# Comment out the line with #
-# */5 * * * * cd /Users/...
-```
-
-Or remove completely:
-
-```bash
-crontab -r  # WARNING: Removes ALL cron jobs
-```
-
----
-
-## Architecture Benefits
-
-✅ **Pipeline never blocks on email**  
-✅ **UI unlocks immediately after Phase 3**  
-✅ **SMTP failures don't affect pipeline**  
-✅ **Automatic retry every 5 minutes**  
-✅ **Independent scaling and monitoring**  
-✅ **Can restart dispatcher without touching pipeline**  
-
----
-
-## Exit Codes
-
-- `0` - Success (all emails sent)
-- `1` - Partial failure (some emails failed)
-- `2` - Fatal error (will retry on next cron run)
-
----
-
-## Production Checklist
-
-- [ ] Dispatcher runs successfully standalone
-- [ ] Cron job added and verified
-- [ ] Logs directory created
-- [ ] SMTP credentials configured in `.env`
-- [ ] Recipients added to `alert_recipients` table
-- [ ] Pipeline no longer blocks on emails
-- [ ] UI unlocks immediately after pipeline
-- [ ] Alerts page shows real-time status updates
+- **Polling-Based**: Delivery latency is bound by the manual cron interval. There is no real-time push mechanism for alerts immediately after ingestion.
+- **In-Memory Payloads**: HTML templates are generated in-memory. For extremely large recipient lists per property (>50), the SendGrid `batch` API would be a required upgrade.
+- **No Webhook Feedback**: The system confirms handover to SendGrid but does not currently poll SendGrid webhooks for "Open" or "Bounce" events.

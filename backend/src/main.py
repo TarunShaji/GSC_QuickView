@@ -1,6 +1,6 @@
 from __future__ import annotations
 """
-GSC Quick View - Sequential Ingestion + Parallel Analysis
+GSC Radar - Sequential Ingestion + Parallel Analysis
 Multi-Account Aware
 """
 

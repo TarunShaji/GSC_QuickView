@@ -6,7 +6,7 @@ from pydantic import field_validator
 
 class Settings(BaseSettings):
     """
-    Centralized configuration for GSC Quick View.
+    Centralized configuration for GSC Radar.
     Loads from .env file or environment variables.
     """
     model_config = SettingsConfigDict(
@@ -16,18 +16,18 @@ class Settings(BaseSettings):
     )
 
     # Database
-    DATABASE_URL: str = "postgresql://localhost/gsc_quickview"
+    DATABASE_URL: str = "postgresql://user:pass@host:port/dbname"
 
     # Application URLs
-    FRONTEND_URL: str = "http://localhost:5173"
-    BACKEND_URL: str = "http://localhost:8000"
+    FRONTEND_URL: str = "https://dashboard.yourdomain.com"
+    BACKEND_URL: str = "https://api.yourdomain.com"
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
 
     # CORS
-    ALLOWED_ORIGINS_STR: str = "http://localhost:5173"
+    ALLOWED_ORIGINS_STR: str = "https://dashboard.yourdomain.com"
 
     # SendGrid Configuration
     SENDGRID_API_KEY: str

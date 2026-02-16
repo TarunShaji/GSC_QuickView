@@ -1,5 +1,5 @@
 /**
- * API client for GSC Quick View backend
+ * API client for GSC Radar backend
  * Multi-Account Aware
  */
 

@@ -1,5 +1,5 @@
 /**
- * TypeScript types for GSC Quick View API responses
+ * TypeScript types for GSC Radar API responses
  */
 
 // Authentication

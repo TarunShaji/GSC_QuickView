@@ -1,6 +1,6 @@
-# Developer Documentation: GSC Quick View
+# Developer Documentation: GSC Radar
 
-Welcome to the technical guide for the GSC Quick View tool. This document explains the system architecture, data flows, and internal logic to help you understand how the tool works "under the hood".
+Welcome to the technical guide for the GSC Radar tool. This document explains the system architecture, data flows, and internal logic to help you understand how the tool works "under the hood".
 
 ## 🏗️ System Architecture
 
@@ -22,14 +22,14 @@ This is the most critical workflow as it enables secure access to Google Search 
 1.  **Initiation**: The user clicks "Login with Google" on the Frontend.
 2.  **Auth URL**: Frontend calls `GET /api/auth/google/url`. Backend uses `GoogleAuthHandler` to generate a Google Authorization URL with the required scopes (`searchconsole.readonly`, `userinfo.email`).
 3.  **Google Interaction**: User is redirected to Google, signs in, and approves permissions.
-4.  **Callback**: Google redirects the user back to the Backend's callback endpoint: `http://localhost:8000/auth/google/callback?code=...`.
+4.  **Callback**: Google redirects the user back to the Backend's callback endpoint (e.g., `https://api.yourdomain.com/auth/google/callback?code=...`).
 5.  **Code Exchange**: 
     *   `auth_handler.py` takes the temporary `code` and exchanges it with Google for permanent **Access** and **Refresh** tokens.
     *   It parses the `id_token` to get the user's Google email.
 6.  **Account Registration**: 
     *   The backend checks the `accounts` table. If the email is new, it creates a new `account_id` (UUID).
     *   Tokens are stored securely in the `gsc_tokens` table, linked to the `account_id`.
-7.  **frontend Redirect**: The backend redirects the browser back to the Frontend: `http://localhost:5173/?account_id={uuid}&email={email}`.
+7.  **frontend Redirect**: The backend redirects the browser back to the Frontend (e.g., `https://dashboard.yourdomain.com/?account_id={uuid}&email={email}`).
 8.  **Session Start**: The Frontend `AuthGate` intercepts these URL params, saves them to `localStorage`, and initializes the `AuthContext`.
 
 ---

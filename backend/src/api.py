@@ -67,8 +67,8 @@ async def lifespan(app: FastAPI):
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="GSC Quick View API",
-    description="HTTP wrapper for multi-account Google Search Console analytics pipeline",
+    title="GSC Radar API",
+    description="Professional SEO performance monitoring and anomaly detection.",
     version="2.0.0",
     lifespan=lifespan
 )

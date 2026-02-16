@@ -1,43 +1,54 @@
-# GSC Quick View - Frontend
+# GSC Radar Frontend 🛰️
 
-This is the React-based frontend for the Google Search Console (GSC) Quick View tool. It provides a premium, responsive dashboard for viewing SEO analytics across multiple accounts.
+The GSC Radar frontend is a professional-grade React SPA designed for SEO performance monitoring. It provides a highly interactive dashboard for visualizing GSC metrics and managing anomaly alerts.
 
-## 🛠️ Tech Stack
+---
 
-- **Framework**: React 18 (Vite)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **State Management**: React Context (AuthContext)
-- **Icons**: Heroicons / Lucide (SVG-based)
+## 🏗️ Architecture & Flow
 
-## 🚀 Getting Started
+### 1. SPA Routing & Fallbacks
+The frontend is built as a Single Page Application (SPA) using client-side routing.
+- **Production Note**: When deploying to a CDN or static host (Vercel, Netlify, Cloudflare), you **must** configure the server to catch-all and redirect all requested paths to `index.html`. This ensures that deep links to property pages (e.g., `/property/<uuid>`) resolve correctly after a page refresh.
 
-### 1. Install Dependencies
-Navigate to the frontend directory and install the required npm packages:
-```bash
-cd frontend
-npm install
+### 2. OAuth & Session Flow
+Authentication is managed via an account-scoped query parameter model:
+1. User clicks "Login with Google."
+2. Backend initiates OAuth flow and redirects back to the frontend.
+3. Frontend captures `account_id` and `email` from the URL.
+4. These identifiers are persisted in `LocalStorage` and managed via `AuthContext.tsx`.
+5. All subsequent API calls automatically inject the `account_id` as a query parameter.
+
+---
+
+## 🛠️ Configuration & Deployment
+
+### Environment Injection
+The frontend requires the backend API base URL at build time. This must be a professional, absolute URL (HTTPS recommended).
+
+```env
+# Create in frontend/.env
+VITE_API_URL=https://api.yourdomain.com/api/v1
 ```
 
-### 2. Configure Proxy
-The frontend uses a proxy configured in `vite.config.ts` to route `/api/*` requests to the local backend server (usually `http://localhost:8000`). Ensure the backend is running before using the dashboard.
+### Build Pipeline
+1. **Target**: ESNext / Modern Browsers.
+2. **Build Tool**: Vite.
+3. **Command**: `npm run build`.
+4. **Output**: `dist/` - This directory contains the static production artifacts.
 
-### 3. Run Development Server
-```bash
-npm run dev
-```
-The app will be available at `http://localhost:5173`.
+---
 
-## 📂 Project Structure
+## 📂 Data Ownership & Components
 
-- `src/components/`: Modular React components (Dashboard, Alerts, Settings).
-- `src/AuthContext.tsx`: Manages the account-level session (account_id, email).
-- `src/api.ts`: Centralized API client using `fetch`.
-- `src/types.ts`: TypeScript interfaces for backend responses.
+- **`src/components/DashboardSummary.tsx`**: High-level portfolio overview. Handles the global "Sync" trigger.
+- **`src/components/PropertyDashboard.tsx`**: Deep-dive into specific properties with URL-level visibility tables.
+- **`src/lib/apiClient.ts`**: Centralized, robust wrapper for all `fetch` requests with built-in error handling and account-id injection.
+- **`src/types.ts`**: Strict TypeScript definitions aligned with backend model responses.
 
-## 🔑 Key Features
+---
 
-- **Multi-Account Dashboard**: Switch between different GSC accounts seamlessly.
-- **Visual Analytics**: Interactive cards and tables showing impression deltas.
-- **Alert Management**: A dedicated settings page to manage email recipients for SEO alerts.
-- **Responsive Design**: Clean, dark-mode focused UI built with Tailwind CSS.
+## � Known Architectural Limitations
+
+- **State Persistence**: The application relies on URL parameters for initial session hydration and `LocalStorage` for continuity. There is no server-side session (JWT/Session Cookie) management in this architectural version.
+- **Real-time Pipeline Status**: The "Pipeline in Progress" state is polled via the API. There is no WebSocket or Server-Sent Events (SSE) implementation.
+- **Static Assets**: All branding assets (Radar icon, logos) are SVGs embedded in the component layer for zero-latency rendering.

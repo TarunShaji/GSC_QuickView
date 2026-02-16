@@ -1,6 +1,6 @@
-# GSC Quick View - Backend API & Pipeline
+# GSC Radar - Backend API & Pipeline
 
-This is the backend for the GSC Quick View tool. It handles OAuth 2.0 authentication, Google Search Console data ingestion, visibility analysis, and automated email alerting.
+This is the backend for the GSC Radar tool. It handles OAuth 2.0 authentication, Google Search Console data ingestion, visibility analysis, and automated email alerting.
 
 ## 🚀 Getting Started
 
@@ -39,7 +39,7 @@ Start the FastAPI server from the `backend/` directory:
 cd backend
 python3 -m uvicorn src.api:app --reload
 ```
-The API documentation will be available at `http://localhost:8000/docs`.
+The API documentation will be available at `https://api.yourdomain.com/docs`.
 
 ## ⚙️ Background Processes
 

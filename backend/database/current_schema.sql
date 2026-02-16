@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict jMnQ4qcxBZtfyzcmdYmLFi45MXGdVKR54JbcgifTkiZdp69nG0HeNHhg2IkYwon
+\restrict 7dQ97ZvLlcifskXniOayHnrGpB8gIGBOw2gGxAoAbzHcdEtviPvOvRlDQF5PsaG
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.1 (Postgres.app)
@@ -3290,8 +3290,6 @@ CREATE TABLE public.page_daily_metrics (
     date date NOT NULL,
     clicks integer DEFAULT 0 NOT NULL,
     impressions integer DEFAULT 0 NOT NULL,
-    ctr numeric(8,6) DEFAULT 0 NOT NULL,
-    "position" numeric(6,2),
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now()
 );
@@ -3970,14 +3968,6 @@ ALTER TABLE ONLY public.page_daily_metrics
 
 
 --
--- Name: page_daily_metrics unique_page_metric; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.page_daily_metrics
-    ADD CONSTRAINT unique_page_metric UNIQUE (property_id, page_url, date);
-
-
---
 -- Name: property_daily_metrics unique_property_metric; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -4468,31 +4458,10 @@ CREATE INDEX idx_device_property_device_date ON public.device_daily_metrics USIN
 
 
 --
--- Name: idx_page_metrics_property_date; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_page_metrics_property_date ON public.page_daily_metrics USING btree (property_id, date DESC);
-
-
---
--- Name: idx_page_metrics_property_page; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_page_metrics_property_page ON public.page_daily_metrics USING btree (property_id, page_url);
-
-
---
 -- Name: idx_page_property_date; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_page_property_date ON public.page_daily_metrics USING btree (property_id, date);
-
-
---
--- Name: idx_page_property_page_date; Type: INDEX; Schema: public; Owner: postgres
---
-
-CREATE INDEX idx_page_property_page_date ON public.page_daily_metrics USING btree (property_id, page_url, date);
 
 
 --
@@ -6561,5 +6530,5 @@ ALTER EVENT TRIGGER pgrst_drop_watch OWNER TO supabase_admin;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict jMnQ4qcxBZtfyzcmdYmLFi45MXGdVKR54JbcgifTkiZdp69nG0HeNHhg2IkYwon
+\unrestrict 7dQ97ZvLlcifskXniOayHnrGpB8gIGBOw2gGxAoAbzHcdEtviPvOvRlDQF5PsaG
 
