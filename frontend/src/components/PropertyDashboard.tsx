@@ -186,17 +186,9 @@ export default function PropertyDashboard() {
                                 <span className="group-hover:-translate-x-1 transition-transform">←</span> Property Overview
                             </button>
                             <div>
-                                <h1 className="text-3xl font-bold text-gray-900 tracking-tight">
-                                    {overview?.property_name || 'Property Analytics'}
-                                    {selectedDevice !== 'all' && (
-                                        <span className="text-gray-400 ml-3 font-medium text-2xl uppercase tracking-tighter opacity-80">
-                                            · {selectedDevice}
-                                        </span>
-                                    )}
+                                <h1 className="text-3xl font-black text-gray-900 uppercase tracking-tight">
+                                    WEEKLY PERFORMANCE
                                 </h1>
-                                <p className="text-gray-500 text-sm font-bold mt-1 uppercase tracking-wider">
-                                    Weekly Performance
-                                </p>
                             </div>
                         </div>
 

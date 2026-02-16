@@ -13,7 +13,6 @@ export default function DashboardSummary() {
     const [isStarting, setIsStarting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus | null>(null);
-    const [expandedWebsites, setExpandedWebsites] = useState<Set<string>>(new Set());
 
     const fetchSummary = useCallback(async (isInitial = false) => {
         if (!accountId) return;
@@ -29,10 +28,7 @@ export default function DashboardSummary() {
                 setPipelineStatus(pStatus);
             }
 
-            // Auto-expand first website if no websites are currently expanded
-            if (data.websites && data.websites.length > 0) {
-                setExpandedWebsites(prev => prev.size === 0 ? new Set([data.websites[0].website_id]) : prev);
-            }
+            // Summary fetched
         } catch (err) {
             console.error('Failed to fetch dashboard summary:', err);
             setError('Failed to load dashboard data');
@@ -86,17 +82,6 @@ export default function DashboardSummary() {
         }
     };
 
-    const toggleWebsite = (websiteId: string) => {
-        setExpandedWebsites(prev => {
-            const next = new Set(prev);
-            if (next.has(websiteId)) {
-                next.delete(websiteId);
-            } else {
-                next.add(websiteId);
-            }
-            return next;
-        });
-    };
 
 
     const getStatusBadge = (status: PropertySummary['status']) => {
@@ -180,7 +165,7 @@ export default function DashboardSummary() {
 
                     <div className="text-center py-20">
                         <div className="bg-white rounded-lg p-12 max-w-xl mx-auto border border-gray-200 shadow-sm">
-                            <div className={`text - 6xl mb - 8 ${pipelineStatus?.is_running ? 'animate-spin' : 'animate-pulse'} `}>
+                            <div className={`text-6xl mb-8 ${pipelineStatus?.is_running ? 'animate-spin' : 'animate-pulse'}`}>
                                 {pipelineStatus?.is_running ? '🌀' : '⚙️'}
                             </div>
                             <h2 className="text-2xl font-bold text-gray-900 mb-4 tracking-tight">
@@ -315,92 +300,84 @@ export default function DashboardSummary() {
                 {summary.websites.map((website: WebsiteSummary) => (
                     <div key={website.website_id} className="bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm">
                         {/* Website Header */}
-                        <button
-                            onClick={() => toggleWebsite(website.website_id)}
-                            className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
-                        >
+                        <div className="w-full px-6 py-4 flex items-center justify-between border-b border-gray-100 bg-gray-50/30">
                             <div className="flex items-center gap-3">
-                                <span className="text-gray-400 text-[10px]">
-                                    {expandedWebsites.has(website.website_id) ? '▼' : '▶'}
-                                </span>
                                 <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider leading-relaxed">{website.website_domain}</h2>
                                 <span className="text-xs text-gray-500 font-medium tracking-tight">
                                     {website.properties.length} {website.properties.length === 1 ? 'property' : 'properties'}
                                 </span>
                             </div>
-                        </button>
+                        </div>
 
                         {/* Property Table */}
-                        {expandedWebsites.has(website.website_id) && (
-                            <div className="border-t border-gray-200">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full">
-                                        <thead className="bg-gray-50">
-                                            <tr>
-                                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
-                                                    Property
-                                                </th>
-                                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
-                                                    Status
-                                                </th>
-                                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
-                                                    Imps (7D)
-                                                </th>
-                                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
-                                                    Clicks (7D)
-                                                </th>
-                                                <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
-                                                    Updated
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100">
-                                            {website.properties.map((property: PropertySummary) => (
-                                                <React.Fragment key={property.property_id}>
-                                                    <tr
-                                                        onClick={() => navigate(`/property/${property.property_id}`)}
-                                                        className="hover:bg-gray-50 cursor-pointer transition-colors"
-                                                    >
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-medium tracking-tight">{property.property_name}</span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap">
-                                                            {getStatusBadge(property.status)}
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-gray-900 font-semibold">
-                                                                    {formatNumber(property.last_7?.impressions ?? 0)}
-                                                                </span>
-                                                                <span className={`text - xs font - medium ${getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')} `}>
-                                                                    {formatDelta(property.delta_pct?.impressions ?? 0)}
-                                                                </span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-gray-900 font-semibold">
-                                                                    {formatNumber(property.last_7?.clicks ?? 0)}
-                                                                </span>
-                                                                <span className={`text - xs font - medium ${getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')} `}>
-                                                                    {formatDelta(property.delta_pct?.clicks ?? 0)}
-                                                                </span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-4 whitespace-nowrap text-[10px] font-bold text-gray-900">
-                                                            {formatDate(property.data_through)}
-                                                        </td>
-                                                    </tr>
+                        <div className="border-t border-gray-200">
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
+                                                Property
+                                            </th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
+                                                Status
+                                            </th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
+                                                Imps (7D)
+                                            </th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
+                                                Clicks (7D)
+                                            </th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest leading-relaxed">
+                                                Updated
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {website.properties.map((property: PropertySummary) => (
+                                            <React.Fragment key={property.property_id}>
+                                                <tr
+                                                    onClick={() => navigate(`/property/${property.property_id}`)}
+                                                    className="hover:bg-gray-50 cursor-pointer transition-colors"
+                                                >
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-medium tracking-tight">{property.property_name}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        {getStatusBadge(property.status)}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-gray-900 font-semibold">
+                                                                {formatNumber(property.last_7?.impressions ?? 0)}
+                                                            </span>
+                                                            <span className={`text-xs font-medium ${getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')}`}>
+                                                                {formatDelta(property.delta_pct?.impressions ?? 0)}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-gray-900 font-semibold">
+                                                                {formatNumber(property.last_7?.clicks ?? 0)}
+                                                            </span>
+                                                            <span className={`text-xs font-medium ${getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')}`}>
+                                                                {formatDelta(property.delta_pct?.clicks ?? 0)}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-[10px] font-bold text-gray-900">
+                                                        {formatDate(property.data_through)}
+                                                    </td>
+                                                </tr>
 
-                                                </React.Fragment>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                            </React.Fragment>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
-                        )}
+                        </div>
                     </div>
                 ))}
             </div>
