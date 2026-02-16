@@ -14,7 +14,6 @@ export default function DashboardSummary() {
     const [error, setError] = useState<string | null>(null);
     const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus | null>(null);
     const [expandedWebsites, setExpandedWebsites] = useState<Set<string>>(new Set());
-    const [expandedProperties, setExpandedProperties] = useState<Set<string>>(new Set());
 
     const fetchSummary = useCallback(async (isInitial = false) => {
         if (!accountId) return;
@@ -99,18 +98,6 @@ export default function DashboardSummary() {
         });
     };
 
-    const toggleProperty = (propertyId: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        setExpandedProperties(prev => {
-            const next = new Set(prev);
-            if (next.has(propertyId)) {
-                next.delete(propertyId);
-            } else {
-                next.add(propertyId);
-            }
-            return next;
-        });
-    };
 
     const getStatusBadge = (status: PropertySummary['status']) => {
         const badges = {
@@ -370,16 +357,12 @@ export default function DashboardSummary() {
                                         <tbody className="divide-y divide-gray-100">
                                             {website.properties.map((property: PropertySummary) => (
                                                 <React.Fragment key={property.property_id}>
-                                                    {/* Property Row */}
                                                     <tr
-                                                        onClick={(e) => toggleProperty(property.property_id, e)}
+                                                        onClick={() => navigate(`/property/${property.property_id}`)}
                                                         className="hover:bg-gray-50 cursor-pointer transition-colors"
                                                     >
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                             <div className="flex items-center gap-2">
-                                                                <span className="text-gray-400 text-[10px]">
-                                                                    {expandedProperties.has(property.property_id) ? '▼' : '▶'}
-                                                                </span>
                                                                 <span className="font-medium tracking-tight">{property.property_name}</span>
                                                             </div>
                                                         </td>
@@ -411,66 +394,6 @@ export default function DashboardSummary() {
                                                         </td>
                                                     </tr>
 
-                                                    {/* Expanded Metrics Row */}
-                                                    {expandedProperties.has(property.property_id) && (
-                                                        <tr key={`${property.property_id} -metrics`}>
-                                                            <td colSpan={5} className="px-6 py-6 bg-gray-50/50">
-                                                                {/* 2 Metric Cards in a Row */}
-                                                                <div className="grid grid-cols-2 gap-6 mb-4">
-                                                                    {/* Impressions Card */}
-                                                                    <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-                                                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-2 leading-relaxed py-1">Impressions</div>
-                                                                        <div className="flex items-baseline justify-between">
-                                                                            <div>
-                                                                                <div className="text-2xl font-bold text-gray-900 leading-tight">
-                                                                                    {formatNumber(property.last_7?.impressions ?? 0)}
-                                                                                </div>
-                                                                                <div className="text-[11px] text-gray-500 font-medium py-0.5">Last 7d</div>
-                                                                            </div>
-                                                                            <div className="text-right">
-                                                                                <div className={`text - sm font - bold ${getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')} `}>
-                                                                                    {formatDelta(property.delta_pct?.impressions ?? 0)}
-                                                                                </div>
-                                                                                <div className="text-[10px] text-gray-500 font-medium italic">vs. {formatNumber(property.prev_7?.impressions ?? 0)}</div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-
-                                                                    {/* Clicks Card */}
-                                                                    <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-                                                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-2 leading-relaxed py-1">Clicks</div>
-                                                                        <div className="flex items-baseline justify-between">
-                                                                            <div>
-                                                                                <div className="text-2xl font-bold text-gray-900 leading-tight">
-                                                                                    {formatNumber(property.last_7?.clicks ?? 0)}
-                                                                                </div>
-                                                                                <div className="text-[11px] text-gray-500 font-medium py-0.5">Last 7d</div>
-                                                                            </div>
-                                                                            <div className="text-right">
-                                                                                <div className={`text - sm font - bold ${getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')} `}>
-                                                                                    {formatDelta(property.delta_pct?.clicks ?? 0)}
-                                                                                </div>
-                                                                                <div className="text-[10px] text-gray-500 font-medium italic">vs. {formatNumber(property.prev_7?.clicks ?? 0)}</div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-
-                                                                {/* View Full Overview Button */}
-                                                                <div className="flex justify-end">
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            navigate(`/property/${property.property_id}`);
-                                                                        }}
-                                                                        className="px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold uppercase tracking-widest rounded-md transition-all shadow-sm"
-                                                                    >
-                                                                        Analysis Details →
-                                                                    </button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    )}
                                                 </React.Fragment>
                                             ))}
                                         </tbody>
