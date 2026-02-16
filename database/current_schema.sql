@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict rFUWGGELajwFe20CA0sHtq75X9gvVrF7FRvx86gFsguIUSBgwYacLjuf7mrKjHG
+\restrict jMnQ4qcxBZtfyzcmdYmLFi45MXGdVKR54JbcgifTkiZdp69nG0HeNHhg2IkYwon
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.1 (Postgres.app)
@@ -3260,30 +3260,6 @@ COMMENT ON TABLE public.device_daily_metrics IS 'Daily device-level Search Conso
 
 
 --
--- Name: device_visibility_analysis; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.device_visibility_analysis (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    property_id uuid NOT NULL,
-    device text NOT NULL,
-    last_7_impressions integer DEFAULT 0 NOT NULL,
-    prev_7_impressions integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT now(),
-    last_7_clicks integer DEFAULT 0,
-    prev_7_clicks integer DEFAULT 0,
-    clicks_delta_pct numeric DEFAULT 0,
-    last_7_ctr numeric DEFAULT 0,
-    prev_7_ctr numeric DEFAULT 0,
-    ctr_delta_pct numeric DEFAULT 0,
-    impressions_delta_pct numeric DEFAULT 0,
-    CONSTRAINT device_visibility_analysis_device_check CHECK ((device = ANY (ARRAY['desktop'::text, 'mobile'::text, 'tablet'::text])))
-);
-
-
-ALTER TABLE public.device_visibility_analysis OWNER TO postgres;
-
---
 -- Name: gsc_tokens; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -3329,31 +3305,6 @@ ALTER TABLE public.page_daily_metrics OWNER TO postgres;
 
 COMMENT ON TABLE public.page_daily_metrics IS 'Daily page-level metrics from Google Search Console';
 
-
---
--- Name: page_visibility_analysis; Type: TABLE; Schema: public; Owner: postgres
---
-
-CREATE TABLE public.page_visibility_analysis (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    property_id uuid NOT NULL,
-    category text NOT NULL,
-    page_url text NOT NULL,
-    impressions_last_7 integer DEFAULT 0 NOT NULL,
-    impressions_prev_7 integer DEFAULT 0 NOT NULL,
-    delta integer NOT NULL,
-    delta_pct numeric(10,2) NOT NULL,
-    created_at timestamp with time zone DEFAULT now(),
-    clicks_last_7 integer DEFAULT 0,
-    clicks_prev_7 integer DEFAULT 0,
-    clicks_delta integer DEFAULT 0,
-    clicks_delta_pct numeric(6,2) DEFAULT 0.0,
-    CONSTRAINT category_check CHECK ((category = ANY (ARRAY['new'::text, 'lost'::text, 'gain'::text, 'drop'::text]))),
-    CONSTRAINT page_visibility_analysis_category_check CHECK ((category = ANY (ARRAY['new'::text, 'lost'::text, 'drop'::text, 'gain'::text])))
-);
-
-
-ALTER TABLE public.page_visibility_analysis OWNER TO postgres;
 
 --
 -- Name: pipeline_runs; Type: TABLE; Schema: public; Owner: postgres
@@ -3947,22 +3898,6 @@ ALTER TABLE ONLY public.device_daily_metrics
 
 
 --
--- Name: device_visibility_analysis device_visibility_analysis_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.device_visibility_analysis
-    ADD CONSTRAINT device_visibility_analysis_pkey PRIMARY KEY (id);
-
-
---
--- Name: device_visibility_analysis device_visibility_analysis_property_id_device_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.device_visibility_analysis
-    ADD CONSTRAINT device_visibility_analysis_property_id_device_key UNIQUE (property_id, device);
-
-
---
 -- Name: gsc_tokens gsc_tokens_account_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -3984,22 +3919,6 @@ ALTER TABLE ONLY public.gsc_tokens
 
 ALTER TABLE ONLY public.page_daily_metrics
     ADD CONSTRAINT page_daily_metrics_pkey PRIMARY KEY (id);
-
-
---
--- Name: page_visibility_analysis page_visibility_analysis_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.page_visibility_analysis
-    ADD CONSTRAINT page_visibility_analysis_pkey PRIMARY KEY (id);
-
-
---
--- Name: page_visibility_analysis page_visibility_analysis_property_id_category_page_url_key; Type: CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.page_visibility_analysis
-    ADD CONSTRAINT page_visibility_analysis_property_id_category_page_url_key UNIQUE (property_id, category, page_url);
 
 
 --
@@ -4535,10 +4454,17 @@ CREATE INDEX idx_device_metrics_property_device ON public.device_daily_metrics U
 
 
 --
--- Name: idx_device_visibility_property; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_device_property_date; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE INDEX idx_device_visibility_property ON public.device_visibility_analysis USING btree (property_id);
+CREATE INDEX idx_device_property_date ON public.device_daily_metrics USING btree (property_id, date);
+
+
+--
+-- Name: idx_device_property_device_date; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_device_property_device_date ON public.device_daily_metrics USING btree (property_id, device, date);
 
 
 --
@@ -4556,10 +4482,17 @@ CREATE INDEX idx_page_metrics_property_page ON public.page_daily_metrics USING b
 
 
 --
--- Name: idx_page_visibility_property; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_page_property_date; Type: INDEX; Schema: public; Owner: postgres
 --
 
-CREATE INDEX idx_page_visibility_property ON public.page_visibility_analysis USING btree (property_id);
+CREATE INDEX idx_page_property_date ON public.page_daily_metrics USING btree (property_id, date);
+
+
+--
+-- Name: idx_page_property_page_date; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_page_property_page_date ON public.page_daily_metrics USING btree (property_id, page_url, date);
 
 
 --
@@ -4584,10 +4517,24 @@ CREATE INDEX idx_property_metrics_property_date ON public.property_daily_metrics
 
 
 --
+-- Name: idx_property_property_date; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_property_property_date ON public.property_daily_metrics USING btree (property_id, date);
+
+
+--
 -- Name: idx_websites_account; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_websites_account ON public.websites USING btree (account_id);
+
+
+--
+-- Name: one_running_pipeline_per_account; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE UNIQUE INDEX one_running_pipeline_per_account ON public.pipeline_runs USING btree (account_id) WHERE (is_running = true);
 
 
 --
@@ -4891,14 +4838,6 @@ ALTER TABLE ONLY public.device_daily_metrics
 
 
 --
--- Name: device_visibility_analysis device_visibility_analysis_property_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.device_visibility_analysis
-    ADD CONSTRAINT device_visibility_analysis_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE CASCADE;
-
-
---
 -- Name: gsc_tokens gsc_tokens_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -4912,14 +4851,6 @@ ALTER TABLE ONLY public.gsc_tokens
 
 ALTER TABLE ONLY public.page_daily_metrics
     ADD CONSTRAINT page_daily_metrics_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE CASCADE;
-
-
---
--- Name: page_visibility_analysis page_visibility_analysis_property_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
---
-
-ALTER TABLE ONLY public.page_visibility_analysis
-    ADD CONSTRAINT page_visibility_analysis_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE CASCADE;
 
 
 --
@@ -6158,15 +6089,6 @@ GRANT ALL ON TABLE public.device_daily_metrics TO service_role;
 
 
 --
--- Name: TABLE device_visibility_analysis; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.device_visibility_analysis TO anon;
-GRANT ALL ON TABLE public.device_visibility_analysis TO authenticated;
-GRANT ALL ON TABLE public.device_visibility_analysis TO service_role;
-
-
---
 -- Name: TABLE gsc_tokens; Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -6182,15 +6104,6 @@ GRANT ALL ON TABLE public.gsc_tokens TO service_role;
 GRANT ALL ON TABLE public.page_daily_metrics TO anon;
 GRANT ALL ON TABLE public.page_daily_metrics TO authenticated;
 GRANT ALL ON TABLE public.page_daily_metrics TO service_role;
-
-
---
--- Name: TABLE page_visibility_analysis; Type: ACL; Schema: public; Owner: postgres
---
-
-GRANT ALL ON TABLE public.page_visibility_analysis TO anon;
-GRANT ALL ON TABLE public.page_visibility_analysis TO authenticated;
-GRANT ALL ON TABLE public.page_visibility_analysis TO service_role;
 
 
 --
@@ -6648,5 +6561,5 @@ ALTER EVENT TRIGGER pgrst_drop_watch OWNER TO supabase_admin;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict rFUWGGELajwFe20CA0sHtq75X9gvVrF7FRvx86gFsguIUSBgwYacLjuf7mrKjHG
+\unrestrict jMnQ4qcxBZtfyzcmdYmLFi45MXGdVKR54JbcgifTkiZdp69nG0HeNHhg2IkYwon
 
