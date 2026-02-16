@@ -654,15 +654,13 @@ class DatabasePersistence:
             # Prepare SQL for batch insert
             insert_sql = """
                 INSERT INTO page_daily_metrics 
-                    (property_id, page_url, date, clicks, impressions, ctr, position, created_at, updated_at)
+                    (property_id, page_url, date, clicks, impressions, created_at, updated_at)
                 VALUES 
-                    (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                    (%s, %s, %s, %s, %s, NOW(), NOW())
                 ON CONFLICT (property_id, page_url, date) 
                 DO UPDATE SET
                     clicks = EXCLUDED.clicks,
                     impressions = EXCLUDED.impressions,
-                    ctr = EXCLUDED.ctr,
-                    position = EXCLUDED.position,
                     updated_at = NOW()
             """
             
@@ -677,9 +675,7 @@ class DatabasePersistence:
                         metric['page_url'],
                         metric['date'],
                         metric['clicks'],
-                        metric['impressions'],
-                        metric['ctr'],
-                        metric['position']
+                        metric['impressions']
                     )
                     for metric in batch
                 ]
