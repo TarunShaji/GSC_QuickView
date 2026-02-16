@@ -26,12 +26,15 @@ export default function AuthGate({ children }: AuthGateProps) {
             <div className="min-h-screen flex items-center justify-center bg-gray-50">
                 <div className="bg-white rounded-xl p-10 max-w-md w-full mx-4 shadow-sm border border-gray-200">
                     <div className="text-center mb-10">
-                        <div className="w-14 h-14 bg-gray-900 rounded-xl flex items-center justify-center mx-auto mb-6">
-                            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        <div className="w-14 h-14 bg-green-500 rounded-xl flex items-center justify-center mx-auto mb-6 shadow-sm shadow-green-100">
+                            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2" />
+                                <circle cx="12" cy="12" r="2" fill="currentColor" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v4M12 18v4M2 12h4M18 12h4" />
                             </svg>
                         </div>
-                        <h1 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">GSC Quick View</h1>
+                        <h1 className="text-3xl font-black text-gray-900 mb-2 tracking-tight">GSC Radar</h1>
                         <p className="text-gray-500 font-medium">
                             Multi-account operational SEO analysis
                         </p>
@@ -80,12 +83,14 @@ export default function AuthGate({ children }: AuthGateProps) {
             <header className="bg-white border-b border-gray-200 py-4 px-6 mb-12 shadow-sm">
                 <div className="max-w-7xl mx-auto flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center">
+                        <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center shadow-sm shadow-green-100">
                             <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2" />
+                                <circle cx="12" cy="12" r="1.5" fill="currentColor" />
                             </svg>
                         </div>
-                        <span className="font-bold text-lg text-gray-900 tracking-tight">GSC Quick View</span>
+                        <span className="font-black text-xl text-gray-900 tracking-tight">GSC Radar</span>
                     </div>
                     <div className="flex items-center gap-6">
                         <div className="hidden md:block text-right">

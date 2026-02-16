@@ -169,7 +169,7 @@ export default function DashboardSummary() {
                                 {pipelineStatus?.is_running ? '🌀' : '⚙️'}
                             </div>
                             <h2 className="text-2xl font-bold text-gray-900 mb-4 tracking-tight">
-                                {pipelineStatus?.is_running ? 'Sync in Progress' : 'Welcome to GSC Quick View'}
+                                {pipelineStatus?.is_running ? 'Sync in Progress' : 'Welcome to GSC Radar'}
                             </h2>
                             <p className="text-base text-gray-500 mb-10 leading-relaxed font-medium">
                                 {pipelineStatus?.is_running
