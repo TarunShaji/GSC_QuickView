@@ -15,37 +15,21 @@ import type {
     Alert
 } from './types';
 
-// Use dynamic VITE_API_URL for production portability
-// Locally, the Vite proxy handles /api -> localhost:8000
-const API_BASE = (import.meta.env.VITE_API_URL || '') + '/api';
+import { apiClient } from './lib/apiClient';
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-    try {
-        const response = await fetch(`${API_BASE}${url}`, {
-            headers: {
-                'Content-Type': 'application/json',
-                ...(options?.headers || {}),
-            },
-            ...options,
-        });
+    const method = options?.method?.toUpperCase() || 'GET';
 
-        if (response.status === 401) {
-            localStorage.removeItem('gsc_account_id');
-            localStorage.removeItem('gsc_email');
-            window.location.reload();
-            return null as any;
-        }
-
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(error || `Request failed: ${response.status}`);
-        }
-
-        return response.json();
-    } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') throw err;
-        throw new Error(err instanceof Error ? err.message : 'Network error');
+    if (method === 'POST') {
+        const body = options?.body ? JSON.parse(options.body as string) : undefined;
+        return apiClient.post<T>(url, body);
     }
+
+    if (method === 'DELETE') {
+        return apiClient.delete<T>(url);
+    }
+
+    return apiClient.get<T>(url);
 }
 
 export const api = {
