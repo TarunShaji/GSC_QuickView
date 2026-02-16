@@ -23,6 +23,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return;
             }
 
+            if (params.get('logout') === 'true') {
+                logout();
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return;
+            }
+
             if (urlAccountId && urlEmail) {
                 localStorage.setItem('gsc_account_id', urlAccountId);
                 localStorage.setItem('gsc_email', urlEmail);

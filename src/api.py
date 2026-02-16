@@ -8,6 +8,7 @@ from typing import Dict, List, Any, Optional
 from config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 from datetime import datetime
 from decimal import Decimal
+from uuid import UUID
 
 from fastapi.middleware.cors import CORSMiddleware
 from settings import settings
@@ -101,6 +102,20 @@ class RecipientRequest(BaseModel):
 # Helpers
 # -------------------------------------------------------------------------
 
+def validate_account_id(account_id: str, db: DatabasePersistence) -> None:
+    """
+    Validate that an account_id is a valid UUID and exists in the DB.
+    Raises HTTPException 400 if malformed, 404 if missing.
+    """
+    try:
+        UUID(account_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid account_id format")
+    
+    if not db.account_exists(account_id):
+        raise HTTPException(status_code=404, detail="Account not found")
+
+
 def serialize_for_json(obj):
     """Convert Decimal and datetime objects for JSON serialization"""
     if isinstance(obj, Decimal):
@@ -193,6 +208,7 @@ def run_pipeline_endpoint(account_id: str):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(account_id, db)
         # 1. Try to start the run synchronously to catch concurrency issues early
         # This will fail with IntegrityError if already running (via DB index).
         run_id = db.start_pipeline_run(account_id)
@@ -220,9 +236,10 @@ def get_pipeline_status(account_id: str):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(account_id, db)
         state = db.fetch_pipeline_state(account_id)
         if not state:
-            return {"is_running": False, "phase": "idle", "account_id": account_id}
+            return {"is_running": False, "account_id": account_id}
         return serialize_row(state)
     finally:
         db.disconnect()
@@ -238,6 +255,7 @@ def get_websites(account_id: str):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(account_id, db)
         websites = db.fetch_all_websites(account_id)
         return [serialize_row(w) for w in websites]
     finally:
@@ -249,6 +267,7 @@ def get_properties_by_website(website_id: str, account_id: str):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(account_id, db)
         properties = db.fetch_properties_by_website(account_id, website_id)
         return [serialize_row(p) for p in properties]
     finally:
@@ -260,6 +279,7 @@ def get_property_overview(property_id: str, account_id: str):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(account_id, db)
         metrics = db.fetch_property_daily_metrics_for_overview(account_id, property_id)
         if not metrics:
             return {
@@ -398,6 +418,7 @@ def get_dashboard_summary(account_id: str):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(account_id, db)
         # Check if account data has been initialized
         if not db.is_account_data_initialized(account_id):
             return {
@@ -486,6 +507,7 @@ def get_page_visibility(property_id: str, account_id: str):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(account_id, db)
         property_data = db.fetch_property_by_id(account_id, property_id)
         if not property_data:
             raise HTTPException(status_code=404, detail="Property not found")
@@ -528,6 +550,7 @@ def get_device_visibility(property_id: str, account_id: str):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(account_id, db)
         property_data = db.fetch_property_by_id(account_id, property_id)
         if not property_data:
             raise HTTPException(status_code=404, detail="Property not found")
@@ -554,6 +577,7 @@ def get_alerts(account_id: str, limit: int = 20):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(account_id, db)
         alerts = db.fetch_recent_alerts(account_id, limit)
         return [serialize_row(a) for a in alerts]
     finally:
@@ -568,6 +592,7 @@ def get_alert_recipients(account_id: str):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(account_id, db)
         recipients = db.fetch_alert_recipients(account_id)
         return {"account_id": account_id, "recipients": recipients}
     finally:
@@ -579,6 +604,7 @@ def add_alert_recipient(request: RecipientRequest):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(request.account_id, db)
         db.add_alert_recipient(request.account_id, request.email)
         return {"status": "success"}
     finally:
@@ -590,6 +616,7 @@ def remove_alert_recipient(account_id: str, email: str):
     db = DatabasePersistence()
     db.connect()
     try:
+        validate_account_id(account_id, db)
         db.remove_alert_recipient(account_id, email)
         return {"status": "success"}
     finally:

@@ -174,6 +174,23 @@ class DatabasePersistence:
             print(f"[DB ERROR] Failed to check initialization status: {e}")
             return False
 
+    def account_exists(self, account_id: str) -> bool:
+        """
+        Check if an account exists in the database.
+        
+        Args:
+            account_id: UUID of the account
+            
+        Returns:
+            True if account exists, False otherwise
+        """
+        try:
+            self.cursor.execute("SELECT 1 FROM accounts WHERE id = %s", (account_id,))
+            return self.cursor.fetchone() is not None
+        except Exception as e:
+            print(f"[DB ERROR] Failed to check account existence: {e}")
+            return False
+
     def fetch_all_accounts(self) -> List[Dict[str, Any]]:
         """Fetch all accounts for the cron dispatcher."""
         try:

@@ -28,6 +28,7 @@ function App() {
               <Route path="/property/:propertyId" element={<PropertyDashboard />} />
               <Route path="/alerts" element={<AlertsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/logout" element={<Navigate to="/?logout=true" replace />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </MainLayout>
