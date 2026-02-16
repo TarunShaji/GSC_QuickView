@@ -6,6 +6,8 @@ Multi-Account Aware
 
 import os
 import time
+import socket
+import traceback
 import smtplib
 from email.message import EmailMessage
 from datetime import datetime
@@ -19,6 +21,36 @@ def log_dispatcher(message: str, account_email: Optional[str] = None):
     timestamp = datetime.now().strftime("%H:%M:%S")
     account_prefix = f" [ACCOUNT: {account_email}]" if account_email else ""
     print(f"[{timestamp}] [DISPATCHER]{account_prefix} {message}")
+
+
+def test_smtp_connectivity(host: str, port: int) -> bool:
+    """
+    Perform deep network diagnostics for SMTP connectivity.
+    Logs DNS resolution and raw TCP socket connection.
+    """
+    log_dispatcher(f"[SMTP-DIAG] Starting network probe for {host}:{port}")
+    
+    # 1. DNS Resolution
+    try:
+        log_dispatcher(f"[SMTP-DIAG] Resolving DNS for {host}...")
+        ip_address = socket.gethostbyname(host)
+        log_dispatcher(f"[SMTP-DIAG] ✅ DNS resolved: {host} -> {ip_address}")
+    except Exception:
+        log_dispatcher(f"[SMTP-DIAG] ❌ DNS Resolution FAILED for {host}")
+        log_dispatcher(traceback.format_exc())
+        return False
+
+    # 2. Raw TCP Socket Connection
+    try:
+        log_dispatcher(f"[SMTP-DIAG] Attempting raw TCP connect to {ip_address}:{port}...")
+        sock = socket.create_connection((host, port), timeout=10)
+        log_dispatcher(f"[SMTP-DIAG] ✅ TCP Socket connection SUCCESSFUL to {host}:{port}")
+        sock.close()
+        return True
+    except Exception:
+        log_dispatcher(f"[SMTP-DIAG] ❌ TCP Socket connection FAILED to {host}:{port}")
+        log_dispatcher(traceback.format_exc())
+        return False
 
 
 def fetch_seo_health_summary(account_id: str, property_id: str, db) -> Dict[str, Any]:
@@ -125,9 +157,19 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
     failed_count = 0
 
     try:
-        # 3. Open SINGLE SMTP connection
+        # Pre-connection network check
+        test_smtp_connectivity(settings.SMTP_HOST, settings.SMTP_PORT)
+
+        # 3. Open SINGLE SMTP connection with deep diagnostics
+        log_dispatcher(f"[SMTP-DIAG] Initializing smtplib.SMTP with {settings.SMTP_HOST}:{settings.SMTP_PORT}...")
         server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30)
+        log_dispatcher("[SMTP-DIAG] ✅ SMTP Object initialized")
+        
+        log_dispatcher("[SMTP-DIAG] Attempting STARTTLS upgrade...")
         server.starttls()
+        log_dispatcher("[SMTP-DIAG] ✅ TLS handshake successful")
+        
+        log_dispatcher(f"[SMTP-DIAG] Attempting SMTP Login for {settings.SMTP_USER}...")
         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
         log_dispatcher("✅ SMTP connection authenticated")
 
@@ -151,20 +193,23 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
             for alert in pending:
                 try:
                     msg = create_email_message(account_id, alert, recipients, db)
+                    log_dispatcher(f"[SMTP-DIAG] Attempting to send message for {alert['site_url']}...", account_email)
                     server.send_message(msg)
                     db.mark_alert_email_sent(alert['id'])
                     sent_count += 1
                     log_dispatcher(f"✅ Alert sent for {alert['site_url']}", account_email)
                     time.sleep(1) # Throttle
-                except Exception as e:
-                    log_dispatcher(f"❌ Failed to send alert: {e}", account_email)
+                except Exception:
+                    log_dispatcher(f"❌ [SMTP-DIAG] Failed to send alert for {alert['site_url']}", account_email)
+                    log_dispatcher(traceback.format_exc())
                     failed_count += 1
 
         server.quit()
         log_dispatcher("SMTP connection closed")
         
-    except Exception as e:
-        log_dispatcher(f"❌ Fatal SMTP error: {e}")
+    except Exception:
+        log_dispatcher(f"❌ [SMTP-DIAG] Fatal SMTP error occurred")
+        log_dispatcher(traceback.format_exc())
         return {'sent': sent_count, 'failed': failed_count + 1}
 
     log_dispatcher(f"Dispatcher finished: {sent_count} sent, {failed_count} failed")
