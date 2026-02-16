@@ -622,7 +622,9 @@ def remove_alert_recipient(account_id: str, email: str):
         return {"status": "success"}
     finally:
         db.disconnect()
-
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "gsc_quickview"}
 
 # -------------------------------------------------------------------------
 # Register Routers
