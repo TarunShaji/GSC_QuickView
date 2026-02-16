@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Centralized metrics utilities for GSC Quick View
 """

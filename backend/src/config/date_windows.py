@@ -1,3 +1,4 @@
+from __future__ import annotations
 # Analysis Requirements
 ANALYSIS_WINDOW_DAYS = 14  # 7 days (current) vs 7 days (previous)
 GSC_LAG_DAYS = 2           # GSC data stabilizes ~2 days later

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Centralized window logic for GSC metrics.
 Handles date anchoring, split/aggregation, and canonical windows for consistent analysis.

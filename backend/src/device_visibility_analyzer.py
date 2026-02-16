@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Device Visibility Analyzer
 
@@ -12,6 +13,7 @@ from datetime import datetime
 from src.config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 from src.utils.metrics import safe_delta_pct
 from src.utils.windows import get_most_recent_date, split_rows_by_window, aggregate_metrics
+from src.db_persistence import DatabasePersistence
 
 
 class DeviceVisibilityAnalyzer:

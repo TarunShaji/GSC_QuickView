@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Google Search Console API Client
 Handles authentication and property discovery for multiple accounts

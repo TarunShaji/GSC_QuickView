@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 import json
 from typing import Dict, Any, Tuple
