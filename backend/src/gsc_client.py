@@ -6,7 +6,7 @@ Handles authentication and property discovery for multiple accounts
 import datetime
 from datetime import timezone
 from typing import List, Dict, Any
-
+from src.db_persistence import DatabasePersistence
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
