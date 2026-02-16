@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../AuthContext';
 import PipelineBanner from './PipelineBanner';
-import type { DashboardSummaryResponse, WebsiteSummary, PropertySummary } from '../types';
+import type { DashboardSummaryResponse, WebsiteSummary, PropertySummary, PipelineStatus } from '../types';
 
 export default function DashboardSummary() {
     const { accountId } = useAuth();
@@ -121,7 +121,7 @@ export default function DashboardSummary() {
         };
         const badge = badges[status];
         return (
-            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs border ${badge.color}`}>
+            <span className={`inline - flex items - center gap - 1 px - 2 py - 1 rounded text - xs border ${badge.color} `}>
                 <span>{badge.icon}</span>
                 <span>{badge.text}</span>
             </span>
@@ -129,14 +129,14 @@ export default function DashboardSummary() {
     };
 
     const formatNumber = (num: number): string => {
-        if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-        if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+        if (num >= 1000000) return `${(num / 1000000).toFixed(1)} M`;
+        if (num >= 1000) return `${(num / 1000).toFixed(1)} K`;
         return num.toString();
     };
 
     const formatDelta = (pct: number): string => {
         const sign = pct > 0 ? '+' : '';
-        return `${sign}${pct.toFixed(1)}%`;
+        return `${sign}${pct.toFixed(1)}% `;
     };
 
     const formatDate = (dateStr: string): string => {
@@ -193,7 +193,7 @@ export default function DashboardSummary() {
 
                     <div className="text-center py-20">
                         <div className="bg-white rounded-lg p-12 max-w-xl mx-auto border border-gray-200 shadow-sm">
-                            <div className={`text-6xl mb-8 ${pipelineStatus?.is_running ? 'animate-spin' : 'animate-pulse'}`}>
+                            <div className={`text - 6xl mb - 8 ${pipelineStatus?.is_running ? 'animate-spin' : 'animate-pulse'} `}>
                                 {pipelineStatus?.is_running ? '🌀' : '⚙️'}
                             </div>
                             <h2 className="text-2xl font-bold text-gray-900 mb-4 tracking-tight">
@@ -226,8 +226,9 @@ export default function DashboardSummary() {
                                             className="h-full bg-gray-900 transition-all duration-1000 ease-out"
                                             style={{
                                                 width: `${pipelineStatus.progress_total > 0
-                                                    ? (pipelineStatus.progress_current / pipelineStatus.progress_total) * 100
-                                                    : 0}%`
+                                                        ? (pipelineStatus.progress_current / pipelineStatus.progress_total) * 100
+                                                        : 0
+                                                    }% `
                                             }}
                                         />
                                     </div>
@@ -390,7 +391,7 @@ export default function DashboardSummary() {
                                                                 <span className="text-gray-900 font-semibold">
                                                                     {formatNumber(property.last_7?.impressions ?? 0)}
                                                                 </span>
-                                                                <span className={`text-xs font-medium ${getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')}`}>
+                                                                <span className={`text - xs font - medium ${getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')} `}>
                                                                     {formatDelta(property.delta_pct?.impressions ?? 0)}
                                                                 </span>
                                                             </div>
@@ -400,7 +401,7 @@ export default function DashboardSummary() {
                                                                 <span className="text-gray-900 font-semibold">
                                                                     {formatNumber(property.last_7?.clicks ?? 0)}
                                                                 </span>
-                                                                <span className={`text-xs font-medium ${getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')}`}>
+                                                                <span className={`text - xs font - medium ${getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')} `}>
                                                                     {formatDelta(property.delta_pct?.clicks ?? 0)}
                                                                 </span>
                                                             </div>
@@ -412,7 +413,7 @@ export default function DashboardSummary() {
 
                                                     {/* Expanded Metrics Row */}
                                                     {expandedProperties.has(property.property_id) && (
-                                                        <tr key={`${property.property_id}-metrics`}>
+                                                        <tr key={`${property.property_id} -metrics`}>
                                                             <td colSpan={5} className="px-6 py-6 bg-gray-50/50">
                                                                 {/* 2 Metric Cards in a Row */}
                                                                 <div className="grid grid-cols-2 gap-6 mb-4">
@@ -427,7 +428,7 @@ export default function DashboardSummary() {
                                                                                 <div className="text-[11px] text-gray-500 font-medium py-0.5">Last 7d</div>
                                                                             </div>
                                                                             <div className="text-right">
-                                                                                <div className={`text-sm font-bold ${getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')}`}>
+                                                                                <div className={`text - sm font - bold ${getDeltaColor(property.delta_pct?.impressions ?? 0, 'impressions')} `}>
                                                                                     {formatDelta(property.delta_pct?.impressions ?? 0)}
                                                                                 </div>
                                                                                 <div className="text-[10px] text-gray-500 font-medium italic">vs. {formatNumber(property.prev_7?.impressions ?? 0)}</div>
@@ -446,7 +447,7 @@ export default function DashboardSummary() {
                                                                                 <div className="text-[11px] text-gray-500 font-medium py-0.5">Last 7d</div>
                                                                             </div>
                                                                             <div className="text-right">
-                                                                                <div className={`text-sm font-bold ${getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')}`}>
+                                                                                <div className={`text - sm font - bold ${getDeltaColor(property.delta_pct?.clicks ?? 0, 'clicks')} `}>
                                                                                     {formatDelta(property.delta_pct?.clicks ?? 0)}
                                                                                 </div>
                                                                                 <div className="text-[10px] text-gray-500 font-medium italic">vs. {formatNumber(property.prev_7?.clicks ?? 0)}</div>
@@ -460,7 +461,7 @@ export default function DashboardSummary() {
                                                                     <button
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            navigate(`/property/${property.property_id}`);
+                                                                            navigate(`/ property / ${property.property_id} `);
                                                                         }}
                                                                         className="px-4 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold uppercase tracking-widest rounded-md transition-all shadow-sm"
                                                                     >
