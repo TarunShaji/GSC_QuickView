@@ -140,12 +140,8 @@ export default function DashboardSummary() {
     };
 
     const formatDate = (dateStr: string): string => {
-        const endDate = new Date(dateStr);
-        const startDate = new Date(endDate);
-        startDate.setDate(endDate.getDate() - 6);
-
-        const f = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-        return `${f(startDate)}-${f(endDate)}`;
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
 
     const getDeltaColor = (delta: number, metric: 'impressions' | 'clicks' | 'ctr' | 'position'): string => {

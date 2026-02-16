@@ -240,19 +240,19 @@ export default function PropertyDashboard() {
                                 return (
                                     <>
                                         <KPICard
-                                            label="Gross Impressions"
+                                            label="IMPRESSIONS"
                                             current={deviceData ? deviceData.last_7_impressions : overview.last_7_days.impressions}
                                             prev={deviceData ? deviceData.prev_7_impressions : overview.prev_7_days.impressions}
                                             delta={deviceData ? deviceData.impressions_delta_pct : overview.deltas.impressions_pct}
                                         />
                                         <KPICard
-                                            label="Total Clicks"
+                                            label="CLICKS"
                                             current={deviceData ? deviceData.last_7_clicks : overview.last_7_days.clicks}
                                             prev={deviceData ? deviceData.prev_7_clicks : overview.prev_7_days.clicks}
                                             delta={deviceData ? deviceData.clicks_delta_pct : overview.deltas.clicks_pct}
                                         />
                                         <KPICard
-                                            label="Click-Through Rate"
+                                            label="CTR"
                                             current={deviceData ? deviceData.last_7_ctr : overview.last_7_days.ctr}
                                             prev={deviceData ? deviceData.prev_7_ctr : overview.prev_7_days.ctr}
                                             delta={deviceData ? deviceData.ctr_delta_pct : overview.deltas.ctr_pct}
