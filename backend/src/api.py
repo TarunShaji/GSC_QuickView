@@ -76,10 +76,18 @@ app = FastAPI(
 # Initialize APIRouter for versioned/prefixed data endpoints
 api_router = APIRouter(prefix="/api")
 
+# Normalize ALLOWED_ORIGINS to List[str] (handles comma-separated strings from ENV)
+raw_origins = settings.ALLOWED_ORIGINS
+allowed_origins = []
+if isinstance(raw_origins, str):
+    allowed_origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
+elif isinstance(raw_origins, (list, tuple)):
+    allowed_origins = [str(o) for o in raw_origins]
+
 # Add CORS Middleware for production portability
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
