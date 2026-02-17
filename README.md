@@ -24,11 +24,11 @@ graph TD
     end
 
     subgraph "State Layer"
-        DB[(PostgreSQL)]
+        DB[("PostgreSQL")]
     end
 
     subgraph "Frontend"
-        WEB[React SPA (CDN)]
+        WEB["React SPA (CDN)"]
     end
 
     GSC --> CRON
