@@ -43,7 +43,7 @@ Previous Week ({ctx['prev_week_range']}): {ctx['prev_7_impressions']:,}
 
 Change: {ctx['delta_pct']:+.1f}% (Threshold: 10%)
 
-Open in GSC Radar: https://gsc-quick-view.vercel.app/property/{ctx['property_id']}
+Open in GSC Radar: {settings.FRONTEND_URL}
 
 This alert was generated automatically by GSC Radar.
 """
@@ -102,7 +102,7 @@ def generate_html_email(ctx: Dict[str, Any]) -> str:
             Data Snapshot: {ctx['snapshot_date']}
         </div>
 
-        <a href="https://gsc-quick-view.vercel.app/property/{ctx['property_id']}" class="button">Open in GSC Radar →</a>
+        <a href="{settings.FRONTEND_URL}" class="button">Open in GSC Radar →</a>
 
         <div class="footer">
             This alert was generated automatically by GSC Radar.<br>
