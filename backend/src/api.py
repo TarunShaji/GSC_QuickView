@@ -76,15 +76,27 @@ app = FastAPI(
 # Initialize APIRouter for versioned/prefixed data endpoints
 api_router = APIRouter(prefix="/api")
 
-# Normalize ALLOWED_ORIGINS to List[str] (handles comma-separated strings from ENV)
-raw_origins = settings.ALLOWED_ORIGINS
-allowed_origins = []
-if isinstance(raw_origins, str):
-    allowed_origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
-elif isinstance(raw_origins, (list, tuple)):
-    allowed_origins = [str(o) for o in raw_origins]
+# -------------------------------------------------------------------------
+# CORS Configuration
+# -------------------------------------------------------------------------
+print("\n[STARTUP] Loading CORS settings...")
+print(f"[STARTUP] FRONTEND_URL: {settings.FRONTEND_URL}")
+print(f"[STARTUP] BACKEND_URL: {settings.BACKEND_URL}")
+print(f"[STARTUP] ALLOWED_ORIGINS_STR: {settings.ALLOWED_ORIGINS_STR}")
+print(f"[STARTUP] Parsed ALLOWED_ORIGINS from settings: {settings.ALLOWED_ORIGINS}")
 
-# Add CORS Middleware for production portability
+allowed_origins = settings.ALLOWED_ORIGINS
+
+# Fallback for local development if empty
+if not allowed_origins:
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+    ]
+    print(f"[STARTUP] ALLOWED_ORIGINS empty, falling back to localhost defaults: {allowed_origins}")
+
+print(f"[STARTUP] Final allowed_origins for CORS: {allowed_origins}\n")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
