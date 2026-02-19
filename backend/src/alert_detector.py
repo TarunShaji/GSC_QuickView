@@ -129,9 +129,9 @@ def detect_alert_for_property(account_id: str, property_id: str, db) -> Optional
     # Check if alert should trigger
     if should_trigger_alert(comparison):
         # 🔐 DEDUPLICATION CHECK
-        recent = db.fetch_recent_alert(account_id, property_id, "impression_drop", 24)
+        recent = db.fetch_recent_alert(account_id, property_id, "impression_drop", 72)
         if recent:
-            log_alert("❌ Skipped (Recently triggered within 24h)")
+            log_alert("❌ Skipped (Recently triggered within 72h cooldown)")
             return None
 
         log_alert(f"✅ Triggered (delta={delta_pct:+.1f}%)")

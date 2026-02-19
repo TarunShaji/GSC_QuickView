@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict ePJBNuOazTqSGCosgfySrxZmV7abfffWATAyXSe65hbIadgR7m4GWS54OobgmM9
+\restrict LOEPWK9MA4bLgLTk5bowMmfZfpqIC4V6IstkPmvebXfMjxud6n2WZJGRClpYcP7
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.1 (Postgres.app)
@@ -3023,6 +3023,21 @@ CREATE TABLE public.accounts (
 
 
 --
+-- Name: alert_deliveries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.alert_deliveries (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    alert_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    email text NOT NULL,
+    sent boolean DEFAULT false,
+    sent_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
 -- Name: alert_recipients; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3031,6 +3046,19 @@ CREATE TABLE public.alert_recipients (
     email text NOT NULL,
     created_at timestamp with time zone DEFAULT now(),
     account_id uuid NOT NULL
+);
+
+
+--
+-- Name: alert_subscriptions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.alert_subscriptions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    account_id uuid NOT NULL,
+    email text NOT NULL,
+    property_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now()
 );
 
 
@@ -3640,6 +3668,22 @@ ALTER TABLE ONLY public.accounts
 
 
 --
+-- Name: alert_deliveries alert_deliveries_alert_id_email_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.alert_deliveries
+    ADD CONSTRAINT alert_deliveries_alert_id_email_key UNIQUE (alert_id, email);
+
+
+--
+-- Name: alert_deliveries alert_deliveries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.alert_deliveries
+    ADD CONSTRAINT alert_deliveries_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: alert_recipients alert_recipients_account_email_unique; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3653,6 +3697,22 @@ ALTER TABLE ONLY public.alert_recipients
 
 ALTER TABLE ONLY public.alert_recipients
     ADD CONSTRAINT alert_recipients_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: alert_subscriptions alert_subscriptions_account_id_email_property_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.alert_subscriptions
+    ADD CONSTRAINT alert_subscriptions_account_id_email_property_id_key UNIQUE (account_id, email, property_id);
+
+
+--
+-- Name: alert_subscriptions alert_subscriptions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.alert_subscriptions
+    ADD CONSTRAINT alert_subscriptions_pkey PRIMARY KEY (id);
 
 
 --
@@ -4559,11 +4619,43 @@ ALTER TABLE ONLY auth.sso_domains
 
 
 --
+-- Name: alert_deliveries alert_deliveries_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.alert_deliveries
+    ADD CONSTRAINT alert_deliveries_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
+
+
+--
+-- Name: alert_deliveries alert_deliveries_alert_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.alert_deliveries
+    ADD CONSTRAINT alert_deliveries_alert_id_fkey FOREIGN KEY (alert_id) REFERENCES public.alerts(id) ON DELETE CASCADE;
+
+
+--
 -- Name: alert_recipients alert_recipients_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.alert_recipients
     ADD CONSTRAINT alert_recipients_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
+
+
+--
+-- Name: alert_subscriptions alert_subscriptions_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.alert_subscriptions
+    ADD CONSTRAINT alert_subscriptions_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON DELETE CASCADE;
+
+
+--
+-- Name: alert_subscriptions alert_subscriptions_property_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.alert_subscriptions
+    ADD CONSTRAINT alert_subscriptions_property_id_fkey FOREIGN KEY (property_id) REFERENCES public.properties(id) ON DELETE CASCADE;
 
 
 --
@@ -4899,5 +4991,5 @@ CREATE EVENT TRIGGER pgrst_drop_watch ON sql_drop
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ePJBNuOazTqSGCosgfySrxZmV7abfffWATAyXSe65hbIadgR7m4GWS54OobgmM9
+\unrestrict LOEPWK9MA4bLgLTk5bowMmfZfpqIC4V6IstkPmvebXfMjxud6n2WZJGRClpYcP7
 

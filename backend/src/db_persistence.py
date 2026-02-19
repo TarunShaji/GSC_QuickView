@@ -1326,6 +1326,7 @@ class DatabasePersistence:
                 FROM alert_deliveries
                 WHERE alert_id = %s AND sent = false
                 ORDER BY created_at
+                FOR UPDATE SKIP LOCKED
             """, (alert_id,))
 
             rows = self.cursor.fetchall()
@@ -1355,6 +1356,84 @@ class DatabasePersistence:
             self.connection.rollback()
             print(f"[ERROR] Failed to mark delivery {delivery_id} as sent: {e}")
             raise RuntimeError(f"Database error marking delivery sent: {e}") from e
+
+    def mark_delivery_suppressed(self, delivery_id: str) -> None:
+        """
+        Mark a delivery as suppressed due to per-recipient cooldown.
+
+        Sets sent=true and suppressed=true so that:
+        - check_if_alert_fully_delivered() still works (no open rows remain)
+        - The suppression is auditable (suppressed=true distinguishes from real sends)
+        - The recipient is NOT emailed.
+
+        Args:
+            delivery_id: UUID of the alert_deliveries row
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                UPDATE alert_deliveries
+                SET sent = true, suppressed = true, sent_at = NOW()
+                WHERE id = %s
+            """, (delivery_id,))
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to mark delivery {delivery_id} as suppressed: {e}")
+            raise RuntimeError(f"Database error marking delivery suppressed: {e}") from e
+
+    def is_recipient_in_cooldown(
+        self,
+        alert_id: str,
+        email: str,
+        account_id: str,
+        property_id: str,
+        cooldown_days: int = 3
+    ) -> bool:
+        """
+        Check whether a recipient has received a real (non-suppressed) email
+        for this property within the last cooldown_days.
+
+        The current alert_id is excluded from the check so a fresh alert
+        for the same property is evaluated independently.
+
+        Cooldown clock is based on alert_deliveries.sent_at — the moment the
+        email was physically dispatched — not the alert detection timestamp.
+        This ensures the 3-day window is always measured from actual delivery.
+
+        Args:
+            alert_id:      UUID of the current alert being processed (excluded)
+            email:         Recipient email address
+            account_id:    UUID of the account
+            property_id:   UUID of the property
+            cooldown_days: Lookback window in days (default: 3)
+
+        Returns:
+            True if recipient should be suppressed, False if email should send
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                SELECT 1
+                FROM alert_deliveries ad
+                JOIN alerts a ON ad.alert_id = a.id
+                WHERE ad.email = %s
+                  AND a.account_id = %s
+                  AND a.property_id = %s
+                  AND ad.alert_id != %s
+                  AND ad.sent = true
+                  AND ad.suppressed = false
+                  AND ad.sent_at >= NOW() - (%s * INTERVAL '1 day')
+                LIMIT 1
+            """, (email, account_id, property_id, alert_id, cooldown_days))
+            return self.cursor.fetchone() is not None
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to check cooldown for {email} on property {property_id}: {e}")
+            raise RuntimeError(f"Database error checking recipient cooldown: {e}") from e
 
     def check_if_alert_fully_delivered(self, alert_id: str) -> bool:
         """

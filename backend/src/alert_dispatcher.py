@@ -18,8 +18,13 @@ from sendgrid.helpers.mail import Mail
 # Windows/Metrics Utilities
 from src.utils.windows import get_most_recent_date
 
-from src.page_visibility_analyzer import PageVisibilityAnalyzer
 from src.settings import settings
+
+# ─── Cooldown Configuration ─────────────────────────────────────────────────
+# Recipients will not receive more than one real email per property within this
+# many days. Cooldown is measured from sent_at (actual send time), not from
+# the alert's triggered_at, so cron delays don't erode the window.
+COOLDOWN_DAYS = 3
 
 
 def log_dispatcher(message: str, account_email: Optional[str] = None):
@@ -138,10 +143,12 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
       1. Fetch property-level subscribers
       2. Zero-subscriber guard: mark email_sent=True and skip
       3. Insert delivery rows (idempotent)
-      4. Fetch unsent deliveries (authoritative list)
-      5. Send one email per delivery
-      6. Mark delivery sent on 202 (leave unsent on failure — cron retries)
-      7. Close alert if all deliveries sent
+      4. Fetch unsent deliveries (authoritative list, FOR UPDATE SKIP LOCKED)
+      5. For each unsent delivery:
+         a. Check per-recipient 3-day cooldown → suppress if in cooldown
+         b. Send via SendGrid on 202 → mark sent
+         c. Leave unsent on failure → cron retries
+      6. Close alert if all deliveries sent or suppressed
     """
     log_dispatcher("Starting multi-account alert dispatcher (SendGrid Mode)")
     
@@ -149,10 +156,11 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
     accounts = db.fetch_all_accounts()
     if not accounts:
         log_dispatcher("No accounts found in database")
-        return {'sent': 0, 'failed': 0}
+        return {'sent': 0, 'failed': 0, 'suppressed': 0}
 
     sent_count = 0
     failed_count = 0
+    suppressed_count = 0
 
     try:
         # Initialize SendGrid Client
@@ -184,7 +192,7 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
                     if not subscribers:
                         log_dispatcher(
                             f"No subscribers for property {alert.get('site_url', property_id)} "
-                            f"— marking alert complete (no email sent)",
+                            f"(alert_id={alert_id}) — marking complete (no email sent)",
                             account_email
                         )
                         db.mark_alert_email_sent(alert_id)
@@ -225,10 +233,11 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
                         db.insert_alert_delivery(alert_id, account_id, email)
 
                     # ── STEP 5: Fetch the authoritative unsent delivery list ───────
+                    # Uses FOR UPDATE SKIP LOCKED — safe under concurrent cron runs.
                     unsent = db.fetch_unsent_deliveries(alert_id)
                     if not unsent:
-                        # All deliveries already sent from a prior cron run
-                        log_dispatcher(f"All deliveries already sent for alert {alert_id}", account_email)
+                        # All deliveries already sent/suppressed from a prior cron run
+                        log_dispatcher(f"All deliveries already closed for alert {alert_id}", account_email)
                         db.mark_alert_email_sent(alert_id)
                         continue
 
@@ -237,11 +246,27 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
                         account_email
                     )
 
-                    # ── STEP 6: Send one email per delivery ───────────────────────
+                    # ── STEP 6: Send one email per delivery (cooldown-aware) ───────
                     for delivery in unsent:
                         delivery_id = delivery['id']
                         recipient_email = delivery['email']
                         try:
+                            # Per-recipient cooldown check.
+                            # If this recipient received a real email for this property
+                            # within the last COOLDOWN_DAYS, suppress (don't send).
+                            # mark_delivery_suppressed() sets sent=true so closure works.
+                            if db.is_recipient_in_cooldown(
+                                alert_id, recipient_email, account_id, property_id, COOLDOWN_DAYS
+                            ):
+                                db.mark_delivery_suppressed(delivery_id)
+                                suppressed_count += 1
+                                log_dispatcher(
+                                    f"⏭  Suppressed ({COOLDOWN_DAYS}-day cooldown) "
+                                    f"→ {recipient_email} [delivery: {delivery_id}]",
+                                    account_email
+                                )
+                                continue
+
                             mail = create_sendgrid_message(ctx, [recipient_email])
                             response = sg.send(mail)
 
@@ -280,10 +305,12 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
     except Exception:
         log_dispatcher("❌ [SENDGRID] Fatal SendGrid error occurred")
         log_dispatcher(traceback.format_exc())
-        return {'sent': sent_count, 'failed': failed_count + 1}
+        return {'sent': sent_count, 'failed': failed_count + 1, 'suppressed': suppressed_count}
 
-    log_dispatcher(f"Dispatcher finished: {sent_count} sent, {failed_count} failed")
-    return {'sent': sent_count, 'failed': failed_count}
+    log_dispatcher(
+        f"Dispatcher finished: {sent_count} sent, {suppressed_count} suppressed, {failed_count} failed"
+    )
+    return {'sent': sent_count, 'failed': failed_count, 'suppressed': suppressed_count}
 
 
 def main():
@@ -311,7 +338,11 @@ def main():
         
         # Log summary
         log_dispatcher("=" * 60)
-        log_dispatcher(f"Summary: {result['sent']} sent, {result['failed']} failed")
+        log_dispatcher(
+            f"Summary: {result['sent']} sent, "
+            f"{result['suppressed']} suppressed (cooldown), "
+            f"{result['failed']} failed"
+        )
         log_dispatcher("=" * 60)
         
     except Exception as e:
