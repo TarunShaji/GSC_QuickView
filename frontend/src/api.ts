@@ -11,6 +11,7 @@ import type {
     PageVisibilityResponse,
     DeviceVisibilityResponse,
     RecipientsResponse,
+    SubscriptionsResponse,
     DashboardSummaryResponse,
     Alert
 } from './types';
@@ -83,6 +84,18 @@ export const api = {
             }),
         removeRecipient: (accountId: string, email: string) =>
             fetchJson<{ status: string }>(`/alert-recipients?account_id=${accountId}&email=${email}`, {
+                method: 'DELETE'
+            }),
+        // Property-level subscriptions
+        getSubscriptions: (accountId: string, email: string) =>
+            fetchJson<SubscriptionsResponse>(`/alert-subscriptions?account_id=${accountId}&email=${encodeURIComponent(email)}`),
+        addSubscription: (accountId: string, email: string, propertyId: string) =>
+            fetchJson<{ status: string }>(`/alert-subscriptions`, {
+                method: 'POST',
+                body: JSON.stringify({ account_id: accountId, email, property_id: propertyId })
+            }),
+        removeSubscription: (accountId: string, email: string, propertyId: string) =>
+            fetchJson<{ status: string }>(`/alert-subscriptions?account_id=${accountId}&email=${encodeURIComponent(email)}&property_id=${propertyId}`, {
                 method: 'DELETE'
             }),
     },

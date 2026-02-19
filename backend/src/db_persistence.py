@@ -1165,6 +1165,225 @@ class DatabasePersistence:
             raise RuntimeError(f"Database error removing alert recipient: {e}") from e
 
 
+    # =========================================================================
+    # ALERT SUBSCRIPTIONS (Property-Level Routing)
+    # =========================================================================
+
+    def fetch_property_subscribers(self, account_id: str, property_id: str) -> List[str]:
+        """
+        Fetch all email addresses subscribed to alerts for a specific property.
+
+        Args:
+            account_id: UUID of the account
+            property_id: UUID of the property
+
+        Returns:
+            List of email strings subscribed to this property
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                SELECT email
+                FROM alert_subscriptions
+                WHERE account_id = %s AND property_id = %s
+                ORDER BY created_at
+            """, (account_id, property_id))
+
+            rows = self.cursor.fetchall()
+            return [row['email'] for row in rows]
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch subscribers for property {property_id}: {e}")
+            raise RuntimeError(f"Database error fetching property subscribers: {e}") from e
+
+    def add_alert_subscription(self, account_id: str, email: str, property_id: str) -> None:
+        """
+        Subscribe an email to alerts for a specific property.
+        Idempotent: ON CONFLICT (account_id, email, property_id) DO NOTHING.
+
+        Args:
+            account_id: UUID of the account
+            email: Recipient email address
+            property_id: UUID of the property to subscribe to
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                INSERT INTO alert_subscriptions (account_id, email, property_id)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (account_id, email, property_id) DO NOTHING
+            """, (account_id, email, property_id))
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to add subscription for {email} → property {property_id}: {e}")
+            raise RuntimeError(f"Database error adding alert subscription: {e}") from e
+
+    def remove_alert_subscription(self, account_id: str, email: str, property_id: str) -> None:
+        """
+        Remove an email subscription for a specific property.
+
+        Args:
+            account_id: UUID of the account
+            email: Recipient email address
+            property_id: UUID of the property to unsubscribe from
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                DELETE FROM alert_subscriptions
+                WHERE account_id = %s AND email = %s AND property_id = %s
+            """, (account_id, email, property_id))
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to remove subscription for {email} → property {property_id}: {e}")
+            raise RuntimeError(f"Database error removing alert subscription: {e}") from e
+
+    def fetch_alert_subscriptions(self, account_id: str, email: str) -> List[str]:
+        """
+        Fetch all property_ids that an email is subscribed to for an account.
+
+        Args:
+            account_id: UUID of the account
+            email: Recipient email address
+
+        Returns:
+            List of property_id strings
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                SELECT property_id
+                FROM alert_subscriptions
+                WHERE account_id = %s AND email = %s
+                ORDER BY created_at
+            """, (account_id, email))
+
+            rows = self.cursor.fetchall()
+            return [row['property_id'] for row in rows]
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch subscriptions for {email}: {e}")
+            raise RuntimeError(f"Database error fetching alert subscriptions: {e}") from e
+
+
+    # =========================================================================
+    # ALERT DELIVERIES (Per-Recipient Delivery Tracking)
+    # =========================================================================
+
+    def insert_alert_delivery(self, alert_id: str, account_id: str, email: str) -> None:
+        """
+        Create a delivery tracking record for one recipient of an alert.
+        Fully idempotent: ON CONFLICT (alert_id, email) DO NOTHING.
+
+        IMPORTANT: Do not rely on a return value — if the row already exists,
+        nothing is returned. Use fetch_unsent_deliveries() for the authoritative list.
+
+        Args:
+            alert_id: UUID of the alert
+            account_id: UUID of the account
+            email: Recipient email address
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                INSERT INTO alert_deliveries (alert_id, account_id, email, sent)
+                VALUES (%s, %s, %s, false)
+                ON CONFLICT (alert_id, email) DO NOTHING
+            """, (alert_id, account_id, email))
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to insert delivery for alert {alert_id} → {email}: {e}")
+            raise RuntimeError(f"Database error inserting alert delivery: {e}") from e
+
+    def fetch_unsent_deliveries(self, alert_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch all unsent delivery records for a specific alert.
+        Scoped by alert_id only — never by account, to avoid cross-contamination.
+
+        Args:
+            alert_id: UUID of the alert
+
+        Returns:
+            List of dicts with keys: id, email
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                SELECT id, email
+                FROM alert_deliveries
+                WHERE alert_id = %s AND sent = false
+                ORDER BY created_at
+            """, (alert_id,))
+
+            rows = self.cursor.fetchall()
+            return [dict(row) for row in rows]
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch unsent deliveries for alert {alert_id}: {e}")
+            raise RuntimeError(f"Database error fetching unsent deliveries: {e}") from e
+
+    def mark_delivery_sent(self, delivery_id: str) -> None:
+        """
+        Mark a single delivery record as successfully sent.
+
+        Args:
+            delivery_id: UUID of the alert_deliveries row
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                UPDATE alert_deliveries
+                SET sent = true, sent_at = NOW()
+                WHERE id = %s
+            """, (delivery_id,))
+            self.connection.commit()
+        except psycopg2.Error as e:
+            self.connection.rollback()
+            print(f"[ERROR] Failed to mark delivery {delivery_id} as sent: {e}")
+            raise RuntimeError(f"Database error marking delivery sent: {e}") from e
+
+    def check_if_alert_fully_delivered(self, alert_id: str) -> bool:
+        """
+        Check whether all delivery records for an alert have been sent.
+        Returns True if no unsent delivery rows remain (alert can be closed).
+
+        Args:
+            alert_id: UUID of the alert
+
+        Returns:
+            True if all deliveries are sent, False if any remain unsent
+        """
+        if not self.connection or not self.cursor:
+            raise RuntimeError("Database connection not established")
+
+        try:
+            self.cursor.execute("""
+                SELECT COUNT(*) as unsent_count
+                FROM alert_deliveries
+                WHERE alert_id = %s AND sent = false
+            """, (alert_id,))
+
+            row = self.cursor.fetchone()
+            return row['unsent_count'] == 0
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to check delivery status for alert {alert_id}: {e}")
+            raise RuntimeError(f"Database error checking alert delivery status: {e}") from e
+
+
     def mark_alert_email_sent(self, alert_id: str) -> None:
         """
         Mark an alert as email sent.
@@ -1278,6 +1497,7 @@ class DatabasePersistence:
                 FROM alerts a
                 JOIN properties p ON a.property_id = p.id
                 WHERE a.email_sent = false
+                  AND a.triggered_at >= NOW() - INTERVAL '7 days'
             """
             params = []
             if account_id:

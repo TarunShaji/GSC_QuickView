@@ -121,6 +121,12 @@ export interface RecipientsResponse {
     recipients: string[];
 }
 
+export interface SubscriptionsResponse {
+    account_id: string;
+    email: string;
+    property_ids: string[];
+}
+
 export interface PropertySummary {
     property_id: string;
     property_name: string;

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../AuthContext';
 import PipelineBanner from './PipelineBanner';
-import type { DashboardSummaryResponse, WebsiteSummary, PropertySummary, PipelineStatus } from '../types';
+import type { DashboardSummaryResponse, WebsiteSummary, PropertySummary } from '../types';
 
 export default function DashboardSummary() {
     const { accountId } = useAuth();
@@ -12,8 +12,6 @@ export default function DashboardSummary() {
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [pipelineStatus, setPipelineStatus] = useState<PipelineStatus | null>(null);
-
     const fetchSummary = useCallback(async (isInitial = false) => {
         if (!accountId) return;
         if (isInitial) setIsLoading(true);
@@ -21,14 +19,6 @@ export default function DashboardSummary() {
         try {
             const data = await api.dashboard.getSummary(accountId);
             setSummary(data);
-
-            // If not initialized, also fetch pipeline status once
-            if (data.status === 'not_initialized') {
-                const pStatus = await api.pipeline.getStatus(accountId);
-                setPipelineStatus(pStatus);
-            }
-
-            // Summary fetched
         } catch (err) {
             console.error('Failed to fetch dashboard summary:', err);
             setError('Failed to load dashboard data');
@@ -37,32 +27,9 @@ export default function DashboardSummary() {
         }
     }, [accountId]);
 
-    const fetchPipelineStatus = useCallback(async () => {
-        if (!accountId) return;
-        try {
-            const data = await api.pipeline.getStatus(accountId);
-            setPipelineStatus(data);
-
-            // If pipeline just finished, refresh summary
-            if (pipelineStatus?.is_running && !data.is_running && !data.error) {
-                fetchSummary();
-            }
-        } catch (err) {
-            console.error('Failed to fetch pipeline status:', err);
-        }
-    }, [accountId, pipelineStatus, fetchSummary]);
-
     useEffect(() => {
         fetchSummary(true);
     }, [fetchSummary]);
-
-    // Poll pipeline status if not initialized
-    useEffect(() => {
-        if (!accountId || summary?.status !== 'not_initialized') return;
-
-        const interval = setInterval(fetchPipelineStatus, 5000);
-        return () => clearInterval(interval);
-    }, [accountId, summary, fetchPipelineStatus]);
 
     const handleRunPipeline = async () => {
         if (!accountId) return;
@@ -70,7 +37,8 @@ export default function DashboardSummary() {
         setError(null);
         try {
             await api.pipeline.run(accountId);
-            // The banner will pick up the 'is_running' state automatically
+            // Wake up the banner for intelligent polling
+            window.dispatchEvent(new CustomEvent('pipeline-started'));
         } catch (err: any) {
             if (err.response?.status === 409) {
                 // Already running, ignore
@@ -165,74 +133,26 @@ export default function DashboardSummary() {
 
                     <div className="text-center py-20">
                         <div className="bg-white rounded-lg p-12 max-w-xl mx-auto border border-gray-200 shadow-sm">
-                            <div className={`text-6xl mb-8 ${pipelineStatus?.is_running ? 'animate-spin' : 'animate-pulse'}`}>
-                                {pipelineStatus?.is_running ? '🌀' : '⚙️'}
-                            </div>
-                            <h2 className="text-2xl font-bold text-gray-900 mb-4 tracking-tight">
-                                {pipelineStatus?.is_running ? 'Sync in Progress' : 'Welcome to GSC Radar'}
-                            </h2>
-                            <p className="text-base text-gray-500 mb-10 leading-relaxed font-medium">
-                                {pipelineStatus?.is_running
-                                    ? `Step: ${pipelineStatus.current_step}...`
-                                    : summary.message || 'Connected to Search Console. Press start to fetch and analyze your property data.'}
-                            </p>
-
-                            {error && (
-                                <div className="mb-6 px-4 py-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold uppercase tracking-widest">
-                                    {error}
-                                </div>
-                            )}
-
-                            {pipelineStatus?.is_running ? (
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center mb-1.5">
-                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">System Progress</span>
-                                        <span className="text-xs font-black text-gray-900">
-                                            {pipelineStatus.progress_total > 0
-                                                ? Math.round((pipelineStatus.progress_current / pipelineStatus.progress_total) * 100)
-                                                : 0}%
-                                        </span>
-                                    </div>
-                                    <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-200">
-                                        <div
-                                            className="h-full bg-gray-900 transition-all duration-1000 ease-out"
-                                            style={{
-                                                width: `${pipelineStatus.progress_total > 0
-                                                    ? (pipelineStatus.progress_current / pipelineStatus.progress_total) * 100
-                                                    : 0
-                                                    }% `
-                                            }}
-                                        />
-                                    </div>
-                                    <button
-                                        disabled
-                                        className="w-full bg-gray-100 text-gray-400 font-bold py-4 px-8 rounded-lg flex items-center justify-center gap-3 text-xs uppercase tracking-[0.2em]"
-                                    >
-                                        Pipeline Running...
-                                    </button>
-                                </div>
-                            ) : (
-                                <button
-                                    onClick={handleRunPipeline}
-                                    disabled={isStarting}
-                                    className="w-full bg-gray-900 hover:bg-black disabled:bg-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all flex items-center justify-center gap-3 shadow-sm text-xs uppercase tracking-[0.2em]"
-                                >
-                                    {isStarting ? (
-                                        <>
-                                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-t-white"></div>
-                                            Initiating Sync...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                            Run Initial Pipeline
-                                        </>
-                                    )}
-                                </button>
-                            )}
+                            <button
+                                onClick={handleRunPipeline}
+                                disabled={isStarting}
+                                className="w-full bg-gray-900 hover:bg-black disabled:bg-gray-400 text-white font-bold py-4 px-8 rounded-lg transition-all flex items-center justify-center gap-3 shadow-sm text-xs uppercase tracking-[0.2em]"
+                            >
+                                {isStarting ? (
+                                    <>
+                                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/20 border-t-white"></div>
+                                        Initiating Sync...
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        Run Initial Pipeline
+                                    </>
+                                )}
+                            </button>
 
                             <p className="mt-8 text-gray-400 text-[10px] font-bold uppercase tracking-widest leading-relaxed">
                                 This will sync your properties and analyze the last 14 days of data.

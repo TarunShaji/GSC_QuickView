@@ -133,6 +133,15 @@ def create_sendgrid_message(ctx: Dict[str, Any], recipients: List[str]) -> Mail:
 def dispatch_pending_alerts(db) -> Dict[str, int]:
     """
     Dispatcher - Iterates through all accounts and sends pending alerts via SendGrid API.
+    
+    Flow per alert:
+      1. Fetch property-level subscribers
+      2. Zero-subscriber guard: mark email_sent=True and skip
+      3. Insert delivery rows (idempotent)
+      4. Fetch unsent deliveries (authoritative list)
+      5. Send one email per delivery
+      6. Mark delivery sent on 202 (leave unsent on failure — cron retries)
+      7. Close alert if all deliveries sent
     """
     log_dispatcher("Starting multi-account alert dispatcher (SendGrid Mode)")
     
@@ -154,23 +163,34 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
             account_id = acc['id']
             account_email = acc['google_email']
             
-            # 4. Fetch pending alerts for this account
+            # Fetch pending alerts for this account (email_sent=false, within 7 days)
             pending = db.fetch_pending_alerts(account_id)
             if not pending:
                 continue
-                
-            # 5. Fetch recipients for this account
-            recipients = db.fetch_alert_recipients(account_id)
-            if not recipients:
-                log_dispatcher(f"No recipients configured", account_email)
-                continue
 
-            log_dispatcher(f"Found {len(pending)} pending alerts for {len(recipients)} recipients", account_email)
+            log_dispatcher(f"Found {len(pending)} pending alert(s) to dispatch", account_email)
 
             for alert in pending:
+                alert_id = alert['id']
+                property_id = alert['property_id']
+
                 try:
-                    # Data Enrichment
-                    property_id = alert['property_id']
+                    # ── STEP 1: Fetch property-level subscribers ──────────────────
+                    subscribers = db.fetch_property_subscribers(account_id, property_id)
+
+                    # ── STEP 2: Zero-subscriber guard ─────────────────────────────
+                    # If no one is subscribed, mark alert complete immediately.
+                    # Without this guard, email_sent stays false forever → cron loop.
+                    if not subscribers:
+                        log_dispatcher(
+                            f"No subscribers for property {alert.get('site_url', property_id)} "
+                            f"— marking alert complete (no email sent)",
+                            account_email
+                        )
+                        db.mark_alert_email_sent(alert_id)
+                        continue
+
+                    # ── STEP 3: Data enrichment ───────────────────────────────────
                     property_meta = db.fetch_property_by_id(account_id, property_id)
                     property_name = property_meta.get('property_name') if property_meta else alert['site_url']
                     if not property_name:
@@ -180,17 +200,14 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
                     metrics = db.fetch_property_daily_metrics_for_overview(account_id, property_id)
                     most_recent_date = get_most_recent_date(metrics)
                     
-                    # Compute Windows
                     last_7_start = most_recent_date - timedelta(days=6)
                     prev_7_start = most_recent_date - timedelta(days=13)
                     prev_7_end = most_recent_date - timedelta(days=7)
                     
-                    # Formatting for Email
                     last_week_range = f"{last_7_start.strftime('%b %-d')} – {most_recent_date.strftime('%b %-d')}"
                     prev_week_range = f"{prev_7_start.strftime('%b %-d')} – {prev_7_end.strftime('%b %-d')}"
                     snapshot_date = most_recent_date.strftime("%B %-d, %Y")
-                    
-                    # Unified Alert Context
+
                     ctx = {
                         "property_id": property_id,
                         "property_name": property_name,
@@ -202,29 +219,66 @@ def dispatch_pending_alerts(db) -> Dict[str, int]:
                         "snapshot_date": snapshot_date
                     }
 
-                    mail = create_sendgrid_message(ctx, recipients)
-                    log_dispatcher(f"[SENDGRID] Sending HTML alert for property: {property_name}", account_email)
-                    
-                    response = sg.send(mail)
-                    
-                    # SendGrid returns 202 Accepted on success
-                    if response.status_code == 202:
-                        db.mark_alert_email_sent(alert['id'])
-                        sent_count += 1
-                        log_dispatcher(f"✅ [SENDGRID] Status code: 202 (Success)", account_email)
+                    # ── STEP 4: Insert all delivery rows BEFORE sending ───────────
+                    # Idempotent: ON CONFLICT (alert_id, email) DO NOTHING
+                    for email in subscribers:
+                        db.insert_alert_delivery(alert_id, account_id, email)
+
+                    # ── STEP 5: Fetch the authoritative unsent delivery list ───────
+                    unsent = db.fetch_unsent_deliveries(alert_id)
+                    if not unsent:
+                        # All deliveries already sent from a prior cron run
+                        log_dispatcher(f"All deliveries already sent for alert {alert_id}", account_email)
+                        db.mark_alert_email_sent(alert_id)
+                        continue
+
+                    log_dispatcher(
+                        f"Sending alert for '{property_name}' to {len(unsent)} recipient(s)",
+                        account_email
+                    )
+
+                    # ── STEP 6: Send one email per delivery ───────────────────────
+                    for delivery in unsent:
+                        delivery_id = delivery['id']
+                        recipient_email = delivery['email']
+                        try:
+                            mail = create_sendgrid_message(ctx, [recipient_email])
+                            response = sg.send(mail)
+
+                            if response.status_code == 202:
+                                # Success: mark this delivery as sent
+                                db.mark_delivery_sent(delivery_id)
+                                sent_count += 1
+                                log_dispatcher(f"✅ [SENDGRID] 202 → {recipient_email}", account_email)
+                            else:
+                                # Failure: leave sent=false, cron will retry
+                                log_dispatcher(
+                                    f"❌ [SENDGRID] {response.status_code} → {recipient_email}",
+                                    account_email
+                                )
+                                failed_count += 1
+
+                            time.sleep(0.5)  # API rate limit throttle
+
+                        except Exception:
+                            log_dispatcher(f"❌ [SENDGRID] Exception sending to {recipient_email}", account_email)
+                            log_dispatcher(traceback.format_exc())
+                            failed_count += 1
+
+                    # ── STEP 7: Close alert if all deliveries complete ────────────
+                    if db.check_if_alert_fully_delivered(alert_id):
+                        db.mark_alert_email_sent(alert_id)
+                        log_dispatcher(f"✅ Alert {alert_id} fully delivered — marked complete", account_email)
                     else:
-                        log_dispatcher(f"❌ [SENDGRID] FAILED with status: {response.status_code}", account_email)
-                        log_dispatcher(f"Response Body: {response.body}", account_email)
-                        failed_count += 1
-                        
-                    time.sleep(0.5) # Slight throttle for API rate limits
+                        log_dispatcher(f"⏳ Alert {alert_id} partially delivered — will retry", account_email)
+
                 except Exception:
-                    log_dispatcher(f"❌ [SENDGRID] Incident error occurred for {alert['site_url']}", account_email)
+                    log_dispatcher(f"❌ Error processing alert {alert_id}", account_email)
                     log_dispatcher(traceback.format_exc())
                     failed_count += 1
 
     except Exception:
-        log_dispatcher(f"❌ [SENDGRID] Fatal SendGrid error occurred")
+        log_dispatcher("❌ [SENDGRID] Fatal SendGrid error occurred")
         log_dispatcher(traceback.format_exc())
         return {'sent': sent_count, 'failed': failed_count + 1}
 

@@ -119,6 +119,11 @@ class RecipientRequest(BaseModel):
     account_id: str
     email: str
 
+class SubscriptionRequest(BaseModel):
+    account_id: str
+    email: str
+    property_id: str
+
 # -------------------------------------------------------------------------
 # Helpers
 # -------------------------------------------------------------------------
@@ -642,6 +647,49 @@ def remove_alert_recipient(account_id: str, email: str):
         return {"status": "success"}
     finally:
         db.disconnect()
+
+
+# -------------------------
+# Alert Subscriptions (Property-Level)
+# -------------------------
+
+@api_router.get("/alert-subscriptions")
+def get_alert_subscriptions(account_id: str, email: str):
+    """Get all property_ids this email is subscribed to for an account"""
+    db = DatabasePersistence()
+    db.connect()
+    try:
+        validate_account_id(account_id, db)
+        property_ids = db.fetch_alert_subscriptions(account_id, email)
+        return {"account_id": account_id, "email": email, "property_ids": property_ids}
+    finally:
+        db.disconnect()
+
+@api_router.post("/alert-subscriptions")
+def add_alert_subscription(request: SubscriptionRequest):
+    """Subscribe an email to alerts for a specific property"""
+    db = DatabasePersistence()
+    db.connect()
+    try:
+        validate_account_id(request.account_id, db)
+        db.add_alert_subscription(request.account_id, request.email, request.property_id)
+        return {"status": "success"}
+    finally:
+        db.disconnect()
+
+@api_router.delete("/alert-subscriptions")
+def remove_alert_subscription(account_id: str, email: str, property_id: str):
+    """Unsubscribe an email from alerts for a specific property"""
+    db = DatabasePersistence()
+    db.connect()
+    try:
+        validate_account_id(account_id, db)
+        db.remove_alert_subscription(account_id, email, property_id)
+        return {"status": "success"}
+    finally:
+        db.disconnect()
+
+
 @app.get("/")
 def root():
     return {"status": "ok", "service": "gsc_quickview"}

@@ -10,30 +10,67 @@ interface PipelineBannerProps {
 export default function PipelineBanner({ onSuccess }: PipelineBannerProps) {
     const { accountId } = useAuth();
     const [status, setStatus] = useState<PipelineStatus | null>(null);
+    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const wasRunning = useRef(false);
     const [stuckInfo, setStuckInfo] = useState(false);
     const onSuccessRef = useRef(onSuccess);
+    const forcePolling = useRef(false);
+    const forceStartTimestamp = useRef<number | null>(null);
+
     useEffect(() => {
         onSuccessRef.current = onSuccess;
     }, [onSuccess]);
 
+    const stopPolling = useCallback(() => {
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+    }, []);
+
+    // Define fetchStatus first so it can be used in startPolling
+    // We'll use a functional update pattern or just rely on the fact that startPolling 
+    // will be recreated when fetchStatus changes.
     const fetchStatus = useCallback(async () => {
         if (!accountId) return;
         try {
             const data = await api.pipeline.getStatus(accountId);
             setStatus(data);
 
-            // Handle transition from running to finished
+            // 1. Handle transitions from running to finished
             if (wasRunning.current && !data.is_running && !data.error) {
                 if (onSuccessRef.current) onSuccessRef.current();
             }
             wasRunning.current = data.is_running;
 
-            // Check if run appears stuck (> 60m)
+            // 2. Control polling based on state
+            if (data.is_running) {
+                // startPolling will be defined below, but we can call it here 
+                // because of how useCallback works inside the component scope.
+                // However, to satisfy the linter/TS, we'll defined it properly.
+                _startPolling();
+                forcePolling.current = false;
+                forceStartTimestamp.current = null;
+            } else if (data.error) {
+                stopPolling();
+                forcePolling.current = false;
+                forceStartTimestamp.current = null;
+            } else if (forcePolling.current && forceStartTimestamp.current) {
+                const elapsed = Date.now() - forceStartTimestamp.current;
+                if (elapsed > 60000) {
+                    console.warn('[PIPELINE] Force polling timed out - no run detected.');
+                    forcePolling.current = false;
+                    forceStartTimestamp.current = null;
+                    stopPolling();
+                }
+            } else {
+                stopPolling();
+            }
+
+            // 3. Stuck detection
             if (data.is_running && data.started_at) {
                 const startTime = new Date(data.started_at).getTime();
-                const now = Date.now();
-                if (now - startTime > 3600000) {
+                if (Date.now() - startTime > 3600000) {
                     setStuckInfo(true);
                 } else {
                     setStuckInfo(false);
@@ -43,24 +80,51 @@ export default function PipelineBanner({ onSuccess }: PipelineBannerProps) {
             }
         } catch (err) {
             console.error('Failed to fetch pipeline status:', err);
+            stopPolling();
         }
-    }, [accountId]);
+    }, [accountId, stopPolling]);
+    // Note: _startPolling is added to deps later via a separate reference if needed, 
+    // but here we can just use the internal one.
+
+    function _startPolling() {
+        if (intervalRef.current) return;
+        intervalRef.current = setInterval(() => {
+            fetchStatus();
+        }, 15000);
+    }
+
+    const startPolling = useCallback(_startPolling, [fetchStatus]);
+
+    // Update fetchStatus to include startPolling in its scope properly
+    // This is a bit of a dance to avoid circular deps in the hook itself.
+    useEffect(() => {
+        if (!accountId) {
+            stopPolling();
+            return;
+        }
+        stopPolling();
+        wasRunning.current = false;
+        forcePolling.current = false;
+        forceStartTimestamp.current = null;
+        setStatus(null);
+        fetchStatus();
+    }, [accountId, fetchStatus, stopPolling]);
 
     useEffect(() => {
-        if (!accountId) return;
-
-        // Initial fetch
-        fetchStatus();
-
-        // Strictly controlled interval polling (5 seconds)
-        const interval = setInterval(() => {
+        const handleStarted = () => {
+            console.log('[PIPELINE] Detected pipeline-started event. Waking up banner...');
+            forcePolling.current = true;
+            forceStartTimestamp.current = Date.now();
             fetchStatus();
-        }, 5000);
-
-        return () => {
-            clearInterval(interval);
+            startPolling();
         };
-    }, [accountId, fetchStatus]);
+
+        window.addEventListener('pipeline-started', handleStarted);
+        return () => {
+            window.removeEventListener('pipeline-started', handleStarted);
+            stopPolling();
+        };
+    }, [fetchStatus, startPolling, stopPolling]);
 
     // Don't show if nothing is running or no error
     if (!status || (!status.is_running && !status.error)) return null;
