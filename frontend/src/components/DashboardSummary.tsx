@@ -11,7 +11,7 @@ export default function DashboardSummary() {
     const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [_error, setError] = useState<string | null>(null);
     const fetchSummary = useCallback(async (isInitial = false) => {
         if (!accountId) return;
         if (isInitial) setIsLoading(true);
