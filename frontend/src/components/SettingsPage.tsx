@@ -317,7 +317,7 @@ export default function SettingsPage() {
                                                     onClick={() => toggleExpanded(email)}
                                                     className="text-xs font-bold text-gray-500 hover:text-gray-900 uppercase tracking-widest px-3 py-1.5 rounded border border-gray-200 hover:border-gray-400 transition-all"
                                                 >
-                                                    {isExpanded ? 'Hide' : 'Configure'}
+                                                    {isExpanded ? 'Confirm' : 'Configure'}
                                                 </button>
                                             )}
                                             {/* Delete recipient */}

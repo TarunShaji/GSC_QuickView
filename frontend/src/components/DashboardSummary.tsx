@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { LayoutDashboard, Bell, Settings } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../AuthContext';
 import PipelineBanner from './PipelineBanner';
@@ -8,6 +9,37 @@ import type { DashboardSummaryResponse, WebsiteSummary, PropertySummary } from '
 export default function DashboardSummary() {
     const { accountId } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
+
+    const Nav = () => {
+        const tabs = [
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
+            { id: 'alerts', label: 'Alerts', icon: Bell, path: '/alerts' },
+            { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
+        ];
+
+        return (
+            <div className="flex p-1 bg-gray-100/80 rounded-xl border border-gray-200/50 shadow-inner">
+                {tabs.map((tab) => {
+                    const isActive = location.pathname === tab.path;
+                    const Icon = tab.icon;
+                    return (
+                        <button
+                            key={tab.id}
+                            onClick={() => navigate(tab.path)}
+                            className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${isActive
+                                ? 'bg-white text-gray-900 shadow-md ring-1 ring-gray-200 transform scale-[1.02]'
+                                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-200/50'
+                                }`}
+                        >
+                            <Icon size={16} strokeWidth={isActive ? 2.5 : 2} />
+                            <span className="tracking-tight">{tab.label}</span>
+                        </button>
+                    );
+                })}
+            </div>
+        );
+    };
     const [summary, setSummary] = useState<DashboardSummaryResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
@@ -107,25 +139,9 @@ export default function DashboardSummary() {
             <>
                 <div className="space-y-6">
                     <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-6">
-                        <div className="flex items-center gap-6">
-                            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Property Overview</h1>
-                            <nav className="flex gap-1">
-                                <button className="px-4 py-2 text-sm font-semibold text-gray-900 border-b-2 border-gray-900">
-                                    Dashboard
-                                </button>
-                                <button
-                                    onClick={() => navigate('/alerts')}
-                                    className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 rounded-md transition-colors"
-                                >
-                                    Alerts
-                                </button>
-                                <button
-                                    onClick={() => navigate('/settings')}
-                                    className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 rounded-md transition-colors"
-                                >
-                                    Settings
-                                </button>
-                            </nav>
+                        <div className="flex items-center gap-8">
+                            <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">GSC RADAR</h1>
+                            <Nav />
                         </div>
                     </header>
 
@@ -175,25 +191,9 @@ export default function DashboardSummary() {
     return (
         <div className="space-y-6">
             <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-6">
-                <div className="flex items-center gap-6">
-                    <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Property Overview</h1>
-                    <nav className="flex gap-1">
-                        <button className="px-4 py-2 text-sm font-semibold text-gray-900 border-b-2 border-gray-900">
-                            Dashboard
-                        </button>
-                        <button
-                            onClick={() => navigate('/alerts')}
-                            className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 rounded-md transition-colors"
-                        >
-                            Alerts
-                        </button>
-                        <button
-                            onClick={() => navigate('/settings')}
-                            className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-900 rounded-md transition-colors"
-                        >
-                            Settings
-                        </button>
-                    </nav>
+                <div className="flex items-center gap-8">
+                    <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">GSC RADAR</h1>
+                    <Nav />
                 </div>
 
                 <div className="flex items-center gap-3">
