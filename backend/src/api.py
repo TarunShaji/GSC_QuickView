@@ -306,10 +306,17 @@ def get_property_overview(property_id: str, account_id: str):
     db.connect()
     try:
         validate_account_id(account_id, db)
+        # Fetch property metadata to get site_url (property_name)
+        prop = db.fetch_property_by_id(account_id, property_id)
+        if not prop:
+            raise HTTPException(status_code=404, detail="Property not found")
+        property_name = prop['site_url']
+
         metrics = db.fetch_property_daily_metrics_for_overview(account_id, property_id)
         if not metrics:
             return {
                 "property_id": property_id,
+                "property_name": property_name,
                 "initialized": False,
                 "last_7_days": {
                     "clicks": 0,
@@ -359,6 +366,7 @@ def get_property_overview(property_id: str, account_id: str):
         
         return {
             "property_id": property_id,
+            "property_name": property_name,
             "initialized": True,
             "last_7_days": {
                 "clicks": last_7["clicks"],

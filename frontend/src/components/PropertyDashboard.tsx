@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
+import { Download } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../AuthContext';
 import PipelineBanner from './PipelineBanner';
@@ -106,6 +108,107 @@ export default function PropertyDashboard() {
     const [selectedDevice, setSelectedDevice] = useState<'all' | 'mobile' | 'desktop' | 'tablet'>('all');
     const [isLoading, setIsLoading] = useState(true);
     const [sortConfig, setSortConfig] = useState<{ key: 'impressions' | 'clicks', dir: 'asc' | 'desc' }>({ key: 'impressions', dir: 'desc' });
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const handleExportXLSX = () => {
+        if (!overview || !pages || !devices) return;
+
+        const wb = XLSX.utils.book_new();
+
+        // Sheet 1: Overview
+        const overviewRows = [
+            { Metric: 'Impressions', 'Last 7 Days': overview.last_7_days.impressions, 'Previous 7 Days': overview.prev_7_days.impressions, 'Delta %': overview.deltas.impressions_pct },
+            { Metric: 'Clicks', 'Last 7 Days': overview.last_7_days.clicks, 'Previous 7 Days': overview.prev_7_days.clicks, 'Delta %': overview.deltas.clicks_pct },
+            { Metric: 'CTR', 'Last 7 Days': `${(overview.last_7_days.ctr * 100).toFixed(2)}%`, 'Previous 7 Days': `${(overview.prev_7_days.ctr * 100).toFixed(2)}%`, 'Delta %': overview.deltas.ctr_pct },
+            { Metric: 'Avg Position', 'Last 7 Days': overview.last_7_days.avg_position, 'Previous 7 Days': overview.prev_7_days.avg_position, 'Delta %': -overview.deltas.avg_position },
+        ];
+        const wsOverview = XLSX.utils.json_to_sheet(overviewRows);
+        wsOverview['!cols'] = [
+            { wch: 25 }, // Metric
+            { wch: 18 }, // Last 7 Days
+            { wch: 18 }, // Previous 7 Days
+            { wch: 18 }, // Delta %
+        ];
+        XLSX.utils.book_append_sheet(wb, wsOverview, 'Overview');
+
+        // Sheets 2–5: Page Visibility (all tabs, unfiltered)
+        const pageSheets: { key: keyof typeof pages.pages; name: string }[] = [
+            { key: 'drop', name: 'Visibility - Declining' },
+            { key: 'gain', name: 'Visibility - Rising' },
+            { key: 'new', name: 'Visibility - Emerged' },
+            { key: 'lost', name: 'Visibility - Lost' },
+        ];
+        for (const { key, name } of pageSheets) {
+            const rows = pages.pages[key].map((item: PageVisibilityItem) => ({
+                'Page URL': item.page_url,
+                'Impressions (L7)': item.impressions_last_7,
+                'Impressions (P7)': item.impressions_prev_7,
+                'Impr Δ%': item.delta_pct,
+                'Clicks (L7)': item.clicks_last_7,
+                'Clicks (P7)': item.clicks_prev_7,
+                'Click Δ%': item.clicks_delta_pct,
+            }));
+            const wsPage = XLSX.utils.json_to_sheet(rows);
+            wsPage['!cols'] = [
+                { wch: 60 }, // Page URL
+                { wch: 15 }, // Impressions (L7)
+                { wch: 15 }, // Impressions (P7)
+                { wch: 12 }, // Impr Δ%
+                { wch: 15 }, // Clicks (L7)
+                { wch: 15 }, // Clicks (P7)
+                { wch: 12 }, // Click Δ%
+            ];
+            XLSX.utils.book_append_sheet(wb, wsPage, name);
+        }
+
+        // Sheet 6: Device Breakdown
+        const deviceRows = Object.entries(devices.devices).map(([device, d]) => ({
+            Device: device.charAt(0).toUpperCase() + device.slice(1),
+            'Impressions (L7)': d.last_7_impressions,
+            'Impressions (P7)': d.prev_7_impressions,
+            'Impr Δ%': d.impressions_delta_pct,
+            'Clicks (L7)': d.last_7_clicks,
+            'Clicks (P7)': d.prev_7_clicks,
+            'Click Δ%': d.clicks_delta_pct,
+            'CTR (L7)': `${(d.last_7_ctr * 100).toFixed(2)}%`,
+            'CTR (P7)': `${(d.prev_7_ctr * 100).toFixed(2)}%`,
+        }));
+        const wsDevice = XLSX.utils.json_to_sheet(deviceRows);
+        wsDevice['!cols'] = [
+            { wch: 20 }, // Device
+            { wch: 18 }, // Impressions (L7)
+            { wch: 18 }, // Impressions (P7)
+            { wch: 15 }, // Impr Δ%
+            { wch: 18 }, // Clicks (L7)
+            { wch: 18 }, // Clicks (P7)
+            { wch: 15 }, // Click Δ%
+            { wch: 15 }, // CTR (L7)
+            { wch: 15 }, // CTR (P7)
+        ];
+        XLSX.utils.book_append_sheet(wb, wsDevice, 'Device Breakdown');
+
+        // Build filename: <property-name>_seo_report_<YYYY-MM-DD>.xlsx
+        const safeName = (overview.property_name ?? overview.property_id)
+            .replace(/[^a-z0-9]/gi, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '')
+            .toLowerCase();
+        const dateStr = overview.computed_at
+            ? new Date(overview.computed_at).toISOString().split('T')[0]
+            : new Date().toISOString().split('T')[0];
+        // XLSX.writeFile uses Node.js `fs` and fails silently in browsers.
+        // Instead, write to a buffer and trigger a browser download via Blob.
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${safeName}_seo_report_${dateStr}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
     const fetchAll = useCallback(async (isInitial = false) => {
         if (!propertyId || !accountId) return;
@@ -130,7 +233,18 @@ export default function PropertyDashboard() {
         fetchAll(true);
     }, [fetchAll]);
 
-    // Sorting Logic
+    // Filtering Logic: filter ONLY the active tab, frontend-only
+    const filteredPages = useMemo(() => {
+        if (!pages) return [];
+        const tabPages = pages.pages[activeTab];
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return tabPages;
+        return tabPages.filter((item: PageVisibilityItem) =>
+            item.page_url.toLowerCase().includes(q)
+        );
+    }, [pages, activeTab, searchQuery]);
+
+    // Sorting Logic: sort handler + memo derived from filteredPages
     const handleSort = (key: 'impressions' | 'clicks') => {
         setSortConfig(prev => ({
             key,
@@ -139,14 +253,12 @@ export default function PropertyDashboard() {
     };
 
     const sortedPages = useMemo(() => {
-        if (!pages) return [];
-        const currentPages = [...pages.pages[activeTab]];
-        return currentPages.sort((a, b) => {
+        return [...filteredPages].sort((a, b) => {
             const valA = sortConfig.key === 'impressions' ? a.impressions_last_7 : a.clicks_last_7;
             const valB = sortConfig.key === 'impressions' ? b.impressions_last_7 : b.clicks_last_7;
             return sortConfig.dir === 'desc' ? valB - valA : valA - valB;
         });
-    }, [pages, activeTab, sortConfig]);
+    }, [filteredPages, sortConfig]);
 
     if (isLoading) {
         return (
@@ -206,19 +318,29 @@ export default function PropertyDashboard() {
                                     })()}
                                 </span>
                             </div>
-                            <div className="flex items-center gap-3 bg-white p-1 rounded-md border border-gray-200 shadow-sm">
-                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-3">Device Filter</span>
-                                <select
-                                    value={selectedDevice}
-                                    onChange={(e) => setSelectedDevice(e.target.value as 'all' | 'mobile' | 'desktop' | 'tablet')}
-                                    className="bg-transparent text-gray-900 text-xs font-bold py-1.5 px-3 rounded focus:outline-none cursor-pointer hover:bg-gray-50 transition-all appearance-none pr-8 relative"
-                                    style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'%236b7280\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1rem' }}
+                            <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-3 bg-white p-1 rounded-md border border-gray-200 shadow-sm">
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-3">Device Filter</span>
+                                    <select
+                                        value={selectedDevice}
+                                        onChange={(e) => setSelectedDevice(e.target.value as 'all' | 'mobile' | 'desktop' | 'tablet')}
+                                        className="bg-transparent text-gray-900 text-xs font-bold py-1.5 px-3 rounded focus:outline-none cursor-pointer hover:bg-gray-50 transition-all appearance-none pr-8 relative"
+                                        style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'%236b7280\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1rem' }}
+                                    >
+                                        <option value="all">All Devices</option>
+                                        <option value="mobile">Mobile Only</option>
+                                        <option value="desktop">Desktop Only</option>
+                                        <option value="tablet">Tablet Only</option>
+                                    </select>
+                                </div>
+                                <button
+                                    onClick={handleExportXLSX}
+                                    disabled={!overview || !pages || !devices}
+                                    className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white text-[10px] font-bold uppercase tracking-widest rounded-md hover:bg-gray-700 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
-                                    <option value="all">All Devices</option>
-                                    <option value="mobile">Mobile Only</option>
-                                    <option value="desktop">Desktop Only</option>
-                                    <option value="tablet">Tablet Only</option>
-                                </select>
+                                    <Download size={12} strokeWidth={2.5} />
+                                    Export XLSX
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -287,9 +409,22 @@ export default function PropertyDashboard() {
                     {pages && (
                         <div className="space-y-6">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-gray-200 pb-2">
-                                <h2 className="text-sm font-bold text-gray-900 tracking-widest uppercase flex items-center gap-3">
-                                    Visibility Changes
-                                </h2>
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-sm font-bold text-gray-900 tracking-widest uppercase flex items-center gap-3">
+                                        Visibility Changes
+                                    </h2>
+                                    {/* Search Filter — filters only the active tab, frontend-only */}
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none select-none">⌕</span>
+                                        <input
+                                            type="text"
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            placeholder="Filter by URL"
+                                            className="pl-7 pr-3 py-1.5 text-xs font-semibold text-gray-800 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-gray-500 focus:border-gray-500 transition-all w-44 placeholder-gray-400"
+                                        />
+                                    </div>
+                                </div>
 
                                 {/* Tab Bar */}
                                 <div className="flex gap-6">
@@ -304,7 +439,10 @@ export default function PropertyDashboard() {
                                         return (
                                             <button
                                                 key={tab.id}
-                                                onClick={() => setActiveTab(tab.id as 'drop' | 'gain' | 'new' | 'lost')}
+                                                onClick={() => {
+                                                    setActiveTab(tab.id as 'drop' | 'gain' | 'new' | 'lost');
+                                                    setSearchQuery('');
+                                                }}
                                                 className={`pb-4 px-1 relative flex items-center gap-2 transition-all text-xs font-bold uppercase tracking-widest ${isActive ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'}`}
                                             >
                                                 {tab.label}
@@ -378,12 +516,14 @@ export default function PropertyDashboard() {
                                             <div className="text-gray-100 text-6xl">∅</div>
                                             <div className="space-y-1">
                                                 <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">
-                                                    {activeTab === 'drop' ? 'No significant declines' :
-                                                        activeTab === 'gain' ? 'No significant gains' :
-                                                            'No data found'}
+                                                    {searchQuery.trim()
+                                                        ? `No pages matching "${searchQuery.trim()}"`
+                                                        : activeTab === 'drop' ? 'No significant declines'
+                                                            : activeTab === 'gain' ? 'No significant gains'
+                                                                : 'No data found'}
                                                 </p>
                                                 <p className="text-gray-300 text-[10px] font-medium italic">
-                                                    Operating within normal parameters.
+                                                    {searchQuery.trim() ? 'Try a different search term.' : 'Operating within normal parameters.'}
                                                 </p>
                                             </div>
                                         </div>

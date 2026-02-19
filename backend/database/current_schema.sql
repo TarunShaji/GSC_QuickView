@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict LOEPWK9MA4bLgLTk5bowMmfZfpqIC4V6IstkPmvebXfMjxud6n2WZJGRClpYcP7
+\restrict oI7B5uPVDHmS4Bfp12UfdAnow39kY9PfXrZ4twQhqkRQzfpUnuhOqDgaufjZHxt
 
 -- Dumped from database version 17.6
 -- Dumped by pg_dump version 18.1 (Postgres.app)
@@ -3033,7 +3033,8 @@ CREATE TABLE public.alert_deliveries (
     email text NOT NULL,
     sent boolean DEFAULT false,
     sent_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now()
+    created_at timestamp with time zone DEFAULT now(),
+    suppressed boolean DEFAULT false NOT NULL
 );
 
 
@@ -4260,6 +4261,20 @@ CREATE INDEX users_is_anonymous_idx ON auth.users USING btree (is_anonymous);
 
 
 --
+-- Name: idx_alert_deliveries_alert_unsent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_alert_deliveries_alert_unsent ON public.alert_deliveries USING btree (alert_id) WHERE (sent = false);
+
+
+--
+-- Name: idx_alert_deliveries_cooldown; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_alert_deliveries_cooldown ON public.alert_deliveries USING btree (email, sent_at) WHERE ((sent = true) AND (suppressed = false));
+
+
+--
 -- Name: idx_alerts_account; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4271,6 +4286,13 @@ CREATE INDEX idx_alerts_account ON public.alerts USING btree (account_id);
 --
 
 CREATE INDEX idx_alerts_account_triggered ON public.alerts USING btree (account_id, triggered_at DESC);
+
+
+--
+-- Name: idx_alerts_dedup; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_alerts_dedup ON public.alerts USING btree (account_id, property_id, alert_type, triggered_at DESC);
 
 
 --
@@ -4991,5 +5013,5 @@ CREATE EVENT TRIGGER pgrst_drop_watch ON sql_drop
 -- PostgreSQL database dump complete
 --
 
-\unrestrict LOEPWK9MA4bLgLTk5bowMmfZfpqIC4V6IstkPmvebXfMjxud6n2WZJGRClpYcP7
+\unrestrict oI7B5uPVDHmS4Bfp12UfdAnow39kY9PfXrZ4twQhqkRQzfpUnuhOqDgaufjZHxt
 
