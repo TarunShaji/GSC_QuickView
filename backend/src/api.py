@@ -698,6 +698,28 @@ def remove_alert_subscription(account_id: str, email: str, property_id: str):
         db.disconnect()
 
 
+@api_router.get("/accounts")
+def get_all_accounts():
+    """
+    Return a lightweight list of all accounts for the master selector page.
+    Returns: id, google_email, data_initialized for each account.
+    """
+    db = DatabasePersistence()
+    db.connect()
+    try:
+        accounts = db.fetch_all_accounts()
+        return [
+            {
+                "id": str(a["id"]),
+                "google_email": a["google_email"],
+                "data_initialized": bool(a.get("data_initialized", False))
+            }
+            for a in accounts
+        ]
+    finally:
+        db.disconnect()
+
+
 @app.get("/")
 def root():
     return {"status": "ok", "service": "gsc_quickview"}

@@ -1,12 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
-import { useAuth } from '../AuthContext';
 import type { Alert } from '../types';
 
 
 export default function AlertsPage() {
-    const { accountId } = useAuth();
+    const { accountId } = useParams<{ accountId: string }>();
     const navigate = useNavigate();
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [loading, setLoading] = useState(true);
@@ -67,7 +66,7 @@ export default function AlertsPage() {
             <div className="flex justify-between items-end border-b border-gray-200 pb-8">
                 <div className="space-y-4">
                     <button
-                        onClick={() => navigate('/')}
+                        onClick={() => navigate(`/dashboard/${accountId}`)}
                         className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-2 group"
                     >
                         <span className="group-hover:-translate-x-1 transition-transform">←</span> Portfolio Overview

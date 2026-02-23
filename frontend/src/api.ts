@@ -4,6 +4,7 @@
  */
 
 import type {
+    Account,
     PipelineStatus,
     Website,
     Property,
@@ -34,6 +35,11 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+    accounts: {
+        getAll: () =>
+            fetchJson<Account[]>(`/accounts`),
+    },
+
     auth: {
         // New Web-based OAuth methods
         // Backend now controls the redirect_uri hardcoded to its own callback

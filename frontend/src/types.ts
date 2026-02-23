@@ -7,6 +7,13 @@ export interface AuthStatus {
     authenticated: boolean;
 }
 
+// Master account selector
+export interface Account {
+    id: string;
+    google_email: string;
+    data_initialized: boolean;
+}
+
 // Pipeline
 export interface PipelineProgress {
     current: number;

@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { Download } from 'lucide-react';
 import api from '../api';
-import { useAuth } from '../AuthContext';
 import PipelineBanner from './PipelineBanner';
 import type { PropertyOverview, PageVisibilityResponse, DeviceVisibilityResponse, PageVisibilityItem } from '../types';
 
@@ -94,8 +93,8 @@ const SortableHeader = ({ label, sortKey, currentSort, onSort, align = 'right' }
 };
 
 export default function PropertyDashboard() {
-    const { propertyId } = useParams<{ propertyId: string }>();
-    const { accountId } = useAuth();
+    // Both accountId and propertyId come from the URL: /dashboard/:accountId/property/:propertyId
+    const { accountId, propertyId } = useParams<{ accountId: string; propertyId: string }>();
     const navigate = useNavigate();
 
     // Core State
@@ -292,7 +291,7 @@ export default function PropertyDashboard() {
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-gray-200 pb-8">
                         <div className="space-y-4">
                             <button
-                                onClick={() => navigate('/')}
+                                onClick={() => navigate(`/dashboard/${accountId}`)}
                                 className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-2 group"
                             >
                                 <span className="group-hover:-translate-x-1 transition-transform">←</span> Property Overview

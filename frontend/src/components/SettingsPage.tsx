@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api';
-import { useAuth } from '../AuthContext';
 import type { PropertySummary } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -20,7 +19,9 @@ type TogglingMap = Record<string, boolean>; // `${email}__${propertyId}` → boo
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
-    const { accountId, email: accountEmail } = useAuth();
+    const { accountId } = useParams<{ accountId: string }>();
+    // Derive the email for display from localStorage (set when account was selected)
+    const accountEmail = localStorage.getItem('gsc_email') ?? accountId ?? '';
     const navigate = useNavigate();
 
     // Recipients list
@@ -222,7 +223,7 @@ export default function SettingsPage() {
             <div className="flex justify-between items-end border-b border-gray-200 pb-8">
                 <div className="space-y-4">
                     <button
-                        onClick={() => navigate('/')}
+                        onClick={() => navigate(`/dashboard/${accountId}`)}
                         className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-2 group"
                     >
                         <span className="group-hover:-translate-x-1 transition-transform">←</span> Portfolio Overview

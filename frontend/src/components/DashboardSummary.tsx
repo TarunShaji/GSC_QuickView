@@ -1,27 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { LayoutDashboard, Bell, Settings } from 'lucide-react';
 import api from '../api';
-import { useAuth } from '../AuthContext';
 import PipelineBanner from './PipelineBanner';
 import type { DashboardSummaryResponse, WebsiteSummary, PropertySummary } from '../types';
 
 export default function DashboardSummary() {
-    const { accountId } = useAuth();
+    // accountId comes from the URL: /dashboard/:accountId
+    const { accountId } = useParams<{ accountId: string }>();
     const navigate = useNavigate();
     const location = useLocation();
 
     const Nav = () => {
         const tabs = [
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-            { id: 'alerts', label: 'Alerts', icon: Bell, path: '/alerts' },
-            { id: 'settings', label: 'Settings', icon: Settings, path: '/settings' },
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: `/dashboard/${accountId}` },
+            { id: 'alerts', label: 'Alerts', icon: Bell, path: `/dashboard/${accountId}/alerts` },
+            { id: 'settings', label: 'Settings', icon: Settings, path: `/dashboard/${accountId}/settings` },
         ];
 
         return (
             <div className="flex p-1 bg-gray-100/80 rounded-xl border border-gray-200/50 shadow-inner">
                 {tabs.map((tab) => {
-                    const isActive = location.pathname === tab.path;
+                    const isActive = location.pathname === tab.path || (tab.id === 'dashboard' && location.pathname === `/dashboard/${accountId}`);
                     const Icon = tab.icon;
                     return (
                         <button
@@ -256,7 +256,7 @@ export default function DashboardSummary() {
                                         {website.properties.map((property: PropertySummary) => (
                                             <React.Fragment key={property.property_id}>
                                                 <tr
-                                                    onClick={() => navigate(`/property/${property.property_id}`)}
+                                                    onClick={() => navigate(`/dashboard/${accountId}/property/${property.property_id}`)}
                                                     className="hover:bg-gray-50 cursor-pointer transition-colors"
                                                 >
                                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
