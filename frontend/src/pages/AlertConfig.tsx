@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
-import type { Account, Website, Property } from '../types';
+import type { Account } from '../types';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -91,21 +91,22 @@ export default function AlertConfig() {
     const [selectedAccountId, setSelectedAccountId] = useState<string>('');
     const [accountsLoading, setAccountsLoading] = useState(true);
 
+    // All page data loaded in one request
+    const [pageLoading, setPageLoading] = useState(false);
+    const [pageError, setPageError] = useState<string | null>(null);
+
     // Recipients
     const [recipients, setRecipients] = useState<string[]>([]);
     const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
     const [newEmail, setNewEmail] = useState('');
-    const [recipientsLoading, setRecipientsLoading] = useState(false);
     const [isAdding, setIsAdding] = useState(false);
     const [recipientError, setRecipientError] = useState<string | null>(null);
 
-    // Properties (flat, grouped by website for display)
+    // Properties (flat list, grouped by domain in render)
     const [properties, setProperties] = useState<FlatProperty[]>([]);
-    const [propertiesLoading, setPropertiesLoading] = useState(false);
 
-    // Subscriptions for the selected recipient
+    // Subscriptions — pre-loaded for all recipients in one backend call
     const [subscriptions, setSubscriptions] = useState<SubscriptionMap>({});
-    const [subscriptionsLoading, setSubscriptionsLoading] = useState(false);
     const [toggling, setToggling] = useState<TogglingMap>({});
     const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
 
@@ -114,90 +115,56 @@ export default function AlertConfig() {
         api.accounts.getAll()
             .then((data) => {
                 setAccounts(data);
-                if (data.length > 0) {
-                    setSelectedAccountId(data[0].id);
-                }
+                if (data.length > 0) setSelectedAccountId(data[0].id);
             })
-            .catch(() => { /* handled below by empty state */ })
+            .catch(() => { })
             .finally(() => setAccountsLoading(false));
     }, []);
 
-    // ── Load properties when account changes ─────────────────────────────────
-    const fetchProperties = useCallback(async (accountId: string) => {
+    // ── Load ALL page data in ONE request when account changes ───────────────
+    // Previously: GET /websites → 15× GET /websites/{id}/properties (Promise.all)
+    //             + GET /alert-recipients → M× GET /alert-subscriptions (Promise.all)
+    //
+    // That was 1 + N + 1 + M simultaneous requests:
+    //   With N=15 websites and M=3 recipients → 30 OPTIONS + 30 GETs at t=0
+    //   Each request acquired a DB connection → pool exhausted immediately.
+    //
+    // Now: 1 HTTP request, 1 DB connection, held for ~tens of ms, released.
+    const loadPageData = useCallback(async (accountId: string) => {
         if (!accountId) return;
-        setPropertiesLoading(true);
-        try {
-            const websites: Website[] = await api.websites.getAll(accountId);
-            const propertyLists = await Promise.all(
-                websites.map((w) =>
-                    api.websites.getProperties(accountId, w.id).then(
-                        (props: Property[]) =>
-                            props.map((p) => ({
-                                id: p.id,
-                                name: p.site_url,
-                                websiteDomain: w.base_domain,
-                            }))
-                    ).catch(() => [] as FlatProperty[])
-                )
-            );
-            setProperties(propertyLists.flat());
-        } catch {
-            setProperties([]);
-        } finally {
-            setPropertiesLoading(false);
-        }
-    }, []);
-
-    // ── Load recipients when account changes ─────────────────────────────────
-    const fetchRecipients = useCallback(async (accountId: string) => {
-        if (!accountId) return;
-        setRecipientsLoading(true);
-        setRecipientError(null);
+        setPageLoading(true);
+        setPageError(null);
         setSelectedEmail(null);
         setSubscriptions({});
         try {
-            const data = await api.alerts.getRecipients(accountId);
+            const data = await api.alerts.getAlertConfigData(accountId);
+
+            const flatProperties: FlatProperty[] = data.websites.flatMap((w) =>
+                w.properties.map((p) => ({
+                    id: p.id,
+                    name: p.site_url,
+                    websiteDomain: w.base_domain,
+                }))
+            );
+            setProperties(flatProperties);
             setRecipients(data.recipients);
+
+            // Subscriptions arrive pre-loaded — no follow-up requests needed
+            const subMap: SubscriptionMap = {};
+            for (const [email, propertyIds] of Object.entries(data.subscriptions)) {
+                subMap[email] = new Set(propertyIds);
+            }
+            setSubscriptions(subMap);
         } catch {
-            setRecipientError('Failed to load recipients.');
+            setPageError('Failed to load alert configuration. Please refresh.');
         } finally {
-            setRecipientsLoading(false);
+            setPageLoading(false);
         }
     }, []);
 
     useEffect(() => {
-        if (!selectedAccountId) return;
-        fetchRecipients(selectedAccountId);
-        fetchProperties(selectedAccountId);
-    }, [selectedAccountId, fetchRecipients, fetchProperties]);
-
-    // ── Load subscriptions when a recipient is selected ───────────────────────
-    const fetchSubscriptions = useCallback(async (accountId: string, email: string) => {
-        setSubscriptionsLoading(true);
-        setSubscriptionError(null);
-        try {
-            const data = await api.alerts.getSubscriptions(accountId, email);
-            setSubscriptions((prev) => ({
-                ...prev,
-                [email]: new Set(data.property_ids),
-            }));
-        } catch {
-            setSubscriptions((prev) => ({ ...prev, [email]: new Set() }));
-        } finally {
-            setSubscriptionsLoading(false);
-        }
-    }, []);
-
-    const handleSelectEmail = (email: string) => {
-        if (selectedEmail === email) {
-            setSelectedEmail(null);
-            return;
-        }
-        setSelectedEmail(email);
-        if (!subscriptions[email]) {
-            fetchSubscriptions(selectedAccountId, email);
-        }
-    };
+        if (selectedAccountId) loadPageData(selectedAccountId);
+    }, [selectedAccountId, loadPageData]);
 
     // ── Add recipient ─────────────────────────────────────────────────────────
     const handleAddRecipient = async (e: React.FormEvent) => {
@@ -212,7 +179,8 @@ export default function AlertConfig() {
         try {
             await api.alerts.addRecipient(selectedAccountId, newEmail);
             setNewEmail('');
-            await fetchRecipients(selectedAccountId);
+            setRecipients((prev) => [...prev, newEmail]);
+            setSubscriptions((prev) => ({ ...prev, [newEmail]: new Set() }));
         } catch (err) {
             const msg = err instanceof Error ? err.message : '';
             if (msg.includes('409') || msg.includes('duplicate') || msg.includes('already')) {
@@ -253,7 +221,6 @@ export default function AlertConfig() {
 
         const isSubscribed = subscriptions[email]?.has(propertyId) ?? false;
         setToggling((prev) => ({ ...prev, [key]: true }));
-        // Optimistic update
         setSubscriptions((prev) => {
             const s = new Set(prev[email] ?? []);
             isSubscribed ? s.delete(propertyId) : s.add(propertyId);
@@ -267,7 +234,6 @@ export default function AlertConfig() {
                 await api.alerts.addSubscription(selectedAccountId, email, propertyId);
             }
         } catch {
-            // Revert on failure
             setSubscriptions((prev) => {
                 const s = new Set(prev[email] ?? []);
                 isSubscribed ? s.add(propertyId) : s.delete(propertyId);
@@ -279,11 +245,14 @@ export default function AlertConfig() {
         }
     };
 
+    const handleSelectEmail = (email: string) => {
+        setSelectedEmail((prev) => (prev === email ? null : email));
+    };
+
     // ── Group properties by website domain ────────────────────────────────────
     const propertiesByDomain = properties.reduce<Record<string, FlatProperty[]>>(
         (acc, p) => {
-            const key = p.websiteDomain;
-            acc[key] = acc[key] ? [...acc[key], p] : [p];
+            acc[p.websiteDomain] = acc[p.websiteDomain] ? [...acc[p.websiteDomain], p] : [p];
             return acc;
         },
         {}
@@ -334,157 +303,159 @@ export default function AlertConfig() {
                     )}
                 </div>
 
+                {/* Page-level loading / error */}
+                {pageLoading && (
+                    <div className="flex justify-center py-12"><Spinner /></div>
+                )}
+                {pageError && <InlineError message={pageError} />}
+
                 {/* Recipients section */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                    <SectionLabel>Alert Recipients</SectionLabel>
-                    <p className="text-xs font-medium text-gray-400 mb-6">
-                        Add emails that should receive alert notifications for this account. Click a recipient to configure their property subscriptions.
-                    </p>
+                {!pageLoading && !pageError && (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                        <SectionLabel>Alert Recipients</SectionLabel>
+                        <p className="text-xs font-medium text-gray-400 mb-6">
+                            Add emails that should receive alert notifications for this account. Click a recipient to configure their property subscriptions.
+                        </p>
 
-                    <InlineError message={recipientError} />
+                        <InlineError message={recipientError} />
 
-                    {/* Add recipient form */}
-                    <form onSubmit={handleAddRecipient} className="flex gap-3 mb-8">
-                        <input
-                            id="alert-config-email-input"
-                            type="email"
-                            value={newEmail}
-                            onChange={(e) => setNewEmail(e.target.value)}
-                            placeholder="recipient@company.com"
-                            disabled={!selectedAccountId || isAdding}
-                            className="flex-1 bg-gray-50 border border-gray-200 text-gray-900 text-sm font-medium rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-gray-900 transition-all placeholder:text-gray-300 disabled:opacity-50"
-                        />
-                        <button
-                            id="alert-config-add-btn"
-                            type="submit"
-                            disabled={!selectedAccountId || isAdding || !newEmail}
-                            className="bg-gray-900 hover:bg-black disabled:opacity-40 text-white text-[10px] font-black uppercase tracking-widest px-6 py-3 rounded-lg transition-all flex items-center gap-2"
-                        >
-                            {isAdding ? <Spinner small /> : null}
-                            Add
-                        </button>
-                    </form>
+                        {/* Add recipient form */}
+                        <form onSubmit={handleAddRecipient} className="flex gap-3 mb-8">
+                            <input
+                                id="alert-config-email-input"
+                                type="email"
+                                value={newEmail}
+                                onChange={(e) => setNewEmail(e.target.value)}
+                                placeholder="recipient@company.com"
+                                disabled={!selectedAccountId || isAdding}
+                                className="flex-1 bg-gray-50 border border-gray-200 text-gray-900 text-sm font-medium rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-gray-900 transition-all placeholder:text-gray-300 disabled:opacity-50"
+                            />
+                            <button
+                                id="alert-config-add-btn"
+                                type="submit"
+                                disabled={!selectedAccountId || isAdding || !newEmail}
+                                className="bg-gray-900 hover:bg-black disabled:opacity-40 text-white text-[10px] font-black uppercase tracking-widest px-6 py-3 rounded-lg transition-all flex items-center gap-2"
+                            >
+                                {isAdding ? <Spinner small /> : null}
+                                Add
+                            </button>
+                        </form>
 
-                    {/* Recipients list */}
-                    {recipientsLoading ? (
-                        <div className="flex justify-center py-8"><Spinner /></div>
-                    ) : recipients.length === 0 ? (
-                        <div className="text-center py-12 border border-dashed border-gray-200 rounded-xl text-gray-400 text-sm font-medium">
-                            No recipients configured for this account.
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {recipients.map((email) => {
-                                const isSelected = selectedEmail === email;
-                                const subCount = subscriptions[email]?.size ?? 0;
-                                return (
-                                    <div
-                                        key={email}
-                                        className={[
-                                            'rounded-xl border transition-all duration-150',
-                                            isSelected
-                                                ? 'border-gray-900 bg-gray-50'
-                                                : 'border-gray-100 bg-white hover:border-gray-200',
-                                        ].join(' ')}
-                                    >
+                        {/* Recipients list */}
+                        {recipients.length === 0 ? (
+                            <div className="text-center py-12 border border-dashed border-gray-200 rounded-xl text-gray-400 text-sm font-medium">
+                                No recipients configured for this account.
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {recipients.map((email) => {
+                                    const isSelected = selectedEmail === email;
+                                    const subCount = subscriptions[email]?.size ?? 0;
+                                    return (
                                         <div
-                                            className="flex items-center justify-between px-4 py-3 cursor-pointer"
-                                            onClick={() => handleSelectEmail(email)}
+                                            key={email}
+                                            className={[
+                                                'rounded-xl border transition-all duration-150',
+                                                isSelected
+                                                    ? 'border-gray-900 bg-gray-50'
+                                                    : 'border-gray-100 bg-white hover:border-gray-200',
+                                            ].join(' ')}
                                         >
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <div
-                                                    className={[
-                                                        'w-2 h-2 rounded-full shrink-0 transition-colors',
-                                                        isSelected ? 'bg-gray-900' : 'bg-gray-200',
-                                                    ].join(' ')}
-                                                />
-                                                <span className="text-sm font-semibold text-gray-900 truncate">
-                                                    {email}
-                                                </span>
-                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">
-                                                    {subCount} subscribed
-                                                </span>
+                                            <div
+                                                className="flex items-center justify-between px-4 py-3 cursor-pointer"
+                                                onClick={() => handleSelectEmail(email)}
+                                            >
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div
+                                                        className={[
+                                                            'w-2 h-2 rounded-full shrink-0 transition-colors',
+                                                            isSelected ? 'bg-gray-900' : 'bg-gray-200',
+                                                        ].join(' ')}
+                                                    />
+                                                    <span className="text-sm font-semibold text-gray-900 truncate">
+                                                        {email}
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                                                        {subCount} subscribed
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-2 ml-3 shrink-0">
+                                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                                        {isSelected ? '▲ close' : '▼ configure'}
+                                                    </span>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteRecipient(email);
+                                                        }}
+                                                        className="text-gray-300 hover:text-red-500 p-1.5 rounded transition-colors ml-1"
+                                                        title="Remove recipient"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="flex items-center gap-2 ml-3 shrink-0">
-                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                                    {isSelected ? '▲ close' : '▼ configure'}
-                                                </span>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteRecipient(email);
-                                                    }}
-                                                    className="text-gray-300 hover:text-red-500 p-1.5 rounded transition-colors ml-1"
-                                                    title="Remove recipient"
-                                                >
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        </div>
 
-                                        {/* Property subscriptions panel */}
-                                        {isSelected && (
-                                            <div className="border-t border-gray-100 px-4 pb-4 pt-3">
-                                                <InlineError message={subscriptionError} />
+                                            {/* Property subscriptions panel */}
+                                            {isSelected && (
+                                                <div className="border-t border-gray-100 px-4 pb-4 pt-3">
+                                                    <InlineError message={subscriptionError} />
 
-                                                {subscriptionsLoading ? (
-                                                    <div className="flex justify-center py-6"><Spinner /></div>
-                                                ) : propertiesLoading ? (
-                                                    <div className="flex justify-center py-6"><Spinner /></div>
-                                                ) : properties.length === 0 ? (
-                                                    <p className="text-xs text-gray-400 font-medium py-4 text-center">
-                                                        No properties found — run the pipeline first.
-                                                    </p>
-                                                ) : (
-                                                    <div className="space-y-4">
-                                                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
-                                                            Property Subscriptions — auto-saves on toggle
+                                                    {properties.length === 0 ? (
+                                                        <p className="text-xs text-gray-400 font-medium py-4 text-center">
+                                                            No properties found — run the pipeline first.
                                                         </p>
-                                                        {Object.entries(propertiesByDomain).map(([domain, props]) => (
-                                                            <div key={domain}>
-                                                                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2 pl-1 border-l-2 border-gray-200">
-                                                                    {domain}
-                                                                </p>
-                                                                <div className="space-y-1">
-                                                                    {props.map((prop) => {
-                                                                        const isSubscribed = subscriptions[email]?.has(prop.id) ?? false;
-                                                                        const key = toggleKey(email, prop.id);
-                                                                        const isToggling = toggling[key] ?? false;
-                                                                        return (
-                                                                            <div
-                                                                                key={prop.id}
-                                                                                className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-gray-50 transition-colors"
-                                                                            >
-                                                                                <span className="text-sm text-gray-700 font-medium truncate pr-4">
-                                                                                    {prop.name}
-                                                                                </span>
-                                                                                {isToggling ? (
-                                                                                    <Spinner small />
-                                                                                ) : (
-                                                                                    <ToggleSwitch
-                                                                                        checked={isSubscribed}
-                                                                                        disabled={isToggling}
-                                                                                        onChange={() => handleToggle(email, prop.id)}
-                                                                                    />
-                                                                                )}
-                                                                            </div>
-                                                                        );
-                                                                    })}
+                                                    ) : (
+                                                        <div className="space-y-4">
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                                                                Property Subscriptions — auto-saves on toggle
+                                                            </p>
+                                                            {Object.entries(propertiesByDomain).map(([domain, props]) => (
+                                                                <div key={domain}>
+                                                                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2 pl-1 border-l-2 border-gray-200">
+                                                                        {domain}
+                                                                    </p>
+                                                                    <div className="space-y-1">
+                                                                        {props.map((prop) => {
+                                                                            const isSubscribed = subscriptions[email]?.has(prop.id) ?? false;
+                                                                            const key = toggleKey(email, prop.id);
+                                                                            const isToggling = toggling[key] ?? false;
+                                                                            return (
+                                                                                <div
+                                                                                    key={prop.id}
+                                                                                    className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-gray-50 transition-colors"
+                                                                                >
+                                                                                    <span className="text-sm text-gray-700 font-medium truncate pr-4">
+                                                                                        {prop.name}
+                                                                                    </span>
+                                                                                    {isToggling ? (
+                                                                                        <Spinner small />
+                                                                                    ) : (
+                                                                                        <ToggleSwitch
+                                                                                            checked={isSubscribed}
+                                                                                            disabled={isToggling}
+                                                                                            onChange={() => handleToggle(email, prop.id)}
+                                                                                        />
+                                                                                    )}
+                                                                                </div>
+                                                                            );
+                                                                        })}
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

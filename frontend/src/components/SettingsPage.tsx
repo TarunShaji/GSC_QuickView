@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api';
-import type { PropertySummary } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,61 +43,45 @@ export default function SettingsPage() {
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
 
-    // ── Data fetching ─────────────────────────────────────────────────────────
-
-    const fetchProperties = useCallback(async () => {
+    // ── Load all page data in ONE request ─────────────────────────────────────
+    // Old pattern fired simultaneously:
+    //   GET /dashboard-summary (heavy, full metrics — just to get property names!)
+    //   + GET /alert-recipients
+    //   + Promise.all(N × GET /alert-subscriptions)
+    // = 1 heavy endpoint + 1 + N simultaneous requests → pool exhaustion.
+    //
+    // Now: 1 request, 1 DB connection, released immediately.
+    const loadPageData = useCallback(async () => {
         if (!accountId) return;
+        setIsLoading(true);
+        setError(null);
         try {
-            const data = await api.dashboard.getSummary(accountId);
-            if (data.websites) {
-                const flat = data.websites.flatMap((w) =>
-                    w.properties.map((p: PropertySummary) => ({
-                        id: p.property_id,
-                        name: p.property_name || p.property_id,
-                    }))
-                );
-                setProperties(flat);
-            }
-        } catch {
-            // Properties unavailable is non-fatal — toggles just won't render
-        }
-    }, [accountId]);
+            const data = await api.alerts.getAlertConfigData(accountId);
 
-    const fetchSubscriptionsForEmail = useCallback(async (email: string) => {
-        if (!accountId) return;
-        try {
-            const data = await api.alerts.getSubscriptions(accountId, email);
-            setSubscriptions((prev) => ({
-                ...prev,
-                [email]: new Set(data.property_ids),
-            }));
-        } catch {
-            setSubscriptions((prev) => ({ ...prev, [email]: new Set() }));
-        }
-    }, [accountId]);
-
-    const fetchRecipients = useCallback(async () => {
-        if (!accountId) return;
-        try {
-            setIsLoading(true);
-            const data = await api.alerts.getRecipients(accountId);
+            // Flatten properties from websites
+            const flat: FlatProperty[] = data.websites.flatMap((w) =>
+                w.properties.map((p: { id: string; site_url: string }) => ({ id: p.id, name: p.site_url }))
+            );
+            setProperties(flat);
             setRecipients(data.recipients);
-            // Load subscriptions for all recipients in parallel
-            await Promise.all(data.recipients.map(fetchSubscriptionsForEmail));
+
+            // Subscriptions pre-loaded for all recipients — no per-recipient follow-up queries
+            const subMap: SubscriptionMap = {};
+            for (const [email, ids] of Object.entries(data.subscriptions)) {
+                subMap[email] = new Set(ids as string[]);
+            }
+            setSubscriptions(subMap);
         } catch (err) {
-            console.error('Failed to fetch recipients:', err);
+            console.error('Failed to load page data:', err);
             setError('Failed to load recipients');
         } finally {
             setIsLoading(false);
         }
-    }, [accountId, fetchSubscriptionsForEmail]);
+    }, [accountId]);
 
     useEffect(() => {
-        if (accountId) {
-            fetchProperties();
-            fetchRecipients();
-        }
-    }, [accountId, fetchProperties, fetchRecipients]);
+        if (accountId) loadPageData();
+    }, [accountId, loadPageData]);
 
 
     // ── Recipient management ──────────────────────────────────────────────────
@@ -115,7 +98,9 @@ export default function SettingsPage() {
             setError(null);
             await api.alerts.addRecipient(accountId, newEmail);
             setNewEmail('');
-            await fetchRecipients();
+            // Optimistic add — no need to reload all data
+            setRecipients((prev) => [...prev, newEmail]);
+            setSubscriptions((prev) => ({ ...prev, [newEmail]: new Set() }));
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to add recipient');
         } finally {
@@ -211,14 +196,17 @@ export default function SettingsPage() {
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-2 border-gray-200 border-t-gray-900 rounded-full animate-spin"></div>
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                    <div className="inline-block w-8 h-8 border-2 border-gray-200 border-t-gray-900 rounded-full animate-spin mb-4"></div>
+                    <p className="text-gray-500 font-medium">Loading settings...</p>
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div className="space-y-8">
             {/* Header */}
             <div className="flex justify-between items-end border-b border-gray-200 pb-8">
                 <div className="space-y-4">
@@ -226,161 +214,155 @@ export default function SettingsPage() {
                         onClick={() => navigate(`/dashboard/${accountId}`)}
                         className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-2 group"
                     >
-                        <span className="group-hover:-translate-x-1 transition-transform">←</span> Portfolio Overview
+                        <span className="group-hover:-translate-x-1 transition-transform">←</span>
+                        Portfolio Overview
                     </button>
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Account Settings</h1>
+                        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Alert Settings</h1>
                         <p className="text-gray-500 text-sm font-medium mt-1">
-                            Manage notifications and system preferences
+                            {accountEmail}
                         </p>
                     </div>
                 </div>
             </div>
 
-            {/* Authentication card */}
-            <div className="bg-white rounded-lg p-8 border border-gray-200 shadow-sm">
-                <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">Authentication</h2>
-                <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center">
-                        <span className="text-gray-400">👤</span>
-                    </div>
-                    <div>
-                        <p className="text-sm font-bold text-gray-900">{accountEmail}</p>
-                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Active Search Console session</p>
-                    </div>
+            {/* Error banner */}
+            {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-red-600 font-medium text-sm">❌ {error}</p>
                 </div>
-            </div>
+            )}
 
-            {/* Alert Notifications card */}
-            <div className="bg-white rounded-lg p-8 border border-gray-200 shadow-sm">
-                <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Alert Notifications</h2>
-                <p className="text-gray-500 text-sm font-medium mb-8">
-                    Add recipients and configure which properties each recipient monitors.
-                </p>
-
-                {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md mb-8 text-xs font-bold uppercase tracking-tight">
-                        {error}
-                    </div>
-                )}
+            {/* Recipients section */}
+            <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-5 border-b border-gray-100">
+                    <h2 className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                        Alert Recipients
+                    </h2>
+                    <p className="text-xs text-gray-400 font-medium mt-1">
+                        Emails that receive alert notifications for this account. Expand a recipient to configure their property subscriptions.
+                    </p>
+                </div>
 
                 {/* Add recipient form */}
-                <form onSubmit={handleAddRecipient} className="flex gap-3 mb-10">
-                    <input
-                        type="email"
-                        value={newEmail}
-                        onChange={(e) => setNewEmail(e.target.value)}
-                        placeholder="recipient@enterprise.com"
-                        className="flex-1 bg-gray-50 border border-gray-200 text-gray-900 text-sm font-medium rounded-md px-4 py-2.5 outline-none focus:ring-1 focus:ring-gray-300 transition-all placeholder:text-gray-300"
-                        required
-                    />
-                    <button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="bg-gray-900 hover:bg-black disabled:bg-gray-400 text-white text-xs font-bold uppercase tracking-widest px-6 py-2.5 rounded transition-colors shadow-sm"
-                    >
-                        {isSubmitting ? 'Adding...' : 'Add Recipient'}
-                    </button>
-                </form>
+                <div className="px-6 py-5 border-b border-gray-100">
+                    <form onSubmit={handleAddRecipient} className="flex gap-3">
+                        <input
+                            id="settings-email-input"
+                            type="email"
+                            value={newEmail}
+                            onChange={(e) => setNewEmail(e.target.value)}
+                            placeholder="recipient@company.com"
+                            disabled={isSubmitting}
+                            className="flex-1 bg-gray-50 border border-gray-200 text-gray-900 text-sm font-medium rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-gray-900 transition-all placeholder:text-gray-300 disabled:opacity-50"
+                        />
+                        <button
+                            id="settings-add-btn"
+                            type="submit"
+                            disabled={isSubmitting || !newEmail}
+                            className="bg-gray-900 hover:bg-black disabled:opacity-40 text-white text-[10px] font-black uppercase tracking-widest px-5 py-2.5 rounded-lg transition-all"
+                        >
+                            {isSubmitting ? '…' : 'Add'}
+                        </button>
+                    </form>
+                </div>
 
                 {/* Recipients list */}
-                <h3 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4 leading-relaxed">
-                    Distribution List
-                </h3>
-                <div className="space-y-3">
-                    {recipients.length === 0 ? (
-                        <div className="text-center py-12 border border-gray-100 rounded-lg text-gray-500 font-medium italic text-sm">
-                            No recipients configured.
-                        </div>
-                    ) : (
-                        recipients.map((email) => {
-                            const subscribedIds = subscriptions[email] ?? new Set();
+                {recipients.length === 0 ? (
+                    <div className="px-6 py-12 text-center">
+                        <p className="text-gray-400 text-sm font-medium">No recipients configured for this account.</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-gray-100">
+                        {recipients.map((email) => {
                             const isExpanded = expanded.has(email);
-                            const subscribedCount = subscribedIds.size;
+                            const subCount = subscriptions[email]?.size ?? 0;
 
                             return (
-                                <div
-                                    key={email}
-                                    className="border border-gray-200 rounded-md shadow-sm overflow-hidden"
-                                >
-                                    {/* Recipient row header */}
-                                    <div className="flex items-center justify-between bg-gray-50 px-4 py-3">
-                                        <div className="flex items-center gap-3 min-w-0">
+                                <div key={email}>
+                                    {/* Recipient row */}
+                                    <div className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors">
+                                        <button
+                                            onClick={() => toggleExpanded(email)}
+                                            className="flex items-center gap-3 min-w-0 flex-1 text-left"
+                                        >
+                                            <div className={`w-2 h-2 rounded-full shrink-0 transition-colors ${isExpanded ? 'bg-gray-900' : 'bg-gray-200'}`} />
                                             <span className="text-sm font-semibold text-gray-900 truncate">{email}</span>
                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">
-                                                {subscribedCount} / {properties.length} propert{properties.length === 1 ? 'y' : 'ies'}
+                                                {subCount} subscribed
                                             </span>
-                                        </div>
-                                        <div className="flex items-center gap-2 ml-3 shrink-0">
-                                            {/* Expand/collapse property toggles */}
-                                            {properties.length > 0 && (
-                                                <button
-                                                    onClick={() => toggleExpanded(email)}
-                                                    className="text-xs font-bold text-gray-500 hover:text-gray-900 uppercase tracking-widest px-3 py-1.5 rounded border border-gray-200 hover:border-gray-400 transition-all"
-                                                >
-                                                    {isExpanded ? 'Confirm' : 'Configure'}
-                                                </button>
-                                            )}
-                                            {/* Delete recipient */}
-                                            <button
-                                                onClick={() => handleDeleteRecipient(email)}
-                                                className="text-gray-400 hover:text-red-600 p-2 rounded transition-colors"
-                                                title="Remove recipient"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                                </svg>
-                                            </button>
-                                        </div>
+                                            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                                                {isExpanded ? '▲' : '▼'}
+                                            </span>
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeleteRecipient(email)}
+                                            className="text-gray-300 hover:text-red-500 p-1.5 rounded transition-colors ml-3 shrink-0"
+                                            title="Remove recipient"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                        </button>
                                     </div>
 
-                                    {/* Expandable property toggles */}
-                                    {isExpanded && properties.length > 0 && (
-                                        <div className="border-t border-gray-200 bg-white divide-y divide-gray-100">
-                                            {properties.map((prop) => {
-                                                const isSubscribed = subscribedIds.has(prop.id);
-                                                const key = toggleKey(email, prop.id);
-                                                const isToggling = toggling[key] ?? false;
+                                    {/* Property subscriptions panel */}
+                                    {isExpanded && (
+                                        <div className="bg-gray-50 border-t border-gray-100 px-6 pb-4 pt-3">
+                                            {properties.length === 0 ? (
+                                                <p className="text-xs text-gray-400 font-medium py-4 text-center">
+                                                    No properties found — run the pipeline first.
+                                                </p>
+                                            ) : (
+                                                <div className="space-y-1 pt-2">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-3">
+                                                        Property Subscriptions — auto-saves on toggle
+                                                    </p>
+                                                    {properties.map((prop) => {
+                                                        const isSubscribed = subscriptions[email]?.has(prop.id) ?? false;
+                                                        const key = toggleKey(email, prop.id);
+                                                        const isToggling = toggling[key] ?? false;
 
-                                                return (
-                                                    <div
-                                                        key={prop.id}
-                                                        className="flex items-center justify-between px-4 py-3"
-                                                    >
-                                                        <span className="text-sm text-gray-700 font-medium truncate pr-4">
-                                                            {prop.name}
-                                                        </span>
-                                                        <button
-                                                            onClick={() => handleToggleSubscription(email, prop.id)}
-                                                            disabled={isToggling}
-                                                            className={[
-                                                                'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent',
-                                                                'transition-colors duration-150 ease-in-out focus:outline-none',
-                                                                'disabled:opacity-50 disabled:cursor-not-allowed',
-                                                                isSubscribed ? 'bg-gray-900' : 'bg-gray-200',
-                                                            ].join(' ')}
-                                                            role="switch"
-                                                            aria-checked={isSubscribed}
-                                                            title={isSubscribed ? 'Unsubscribe' : 'Subscribe'}
-                                                        >
-                                                            <span
-                                                                className={[
-                                                                    'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow',
-                                                                    'transform transition duration-150 ease-in-out',
-                                                                    isSubscribed ? 'translate-x-4' : 'translate-x-0',
-                                                                ].join(' ')}
-                                                            />
-                                                        </button>
-                                                    </div>
-                                                );
-                                            })}
+                                                        return (
+                                                            <div
+                                                                key={prop.id}
+                                                                className="flex items-center justify-between py-2.5 px-3 rounded-lg hover:bg-white transition-colors"
+                                                            >
+                                                                <span className="text-sm text-gray-700 font-medium truncate pr-4">{prop.name}</span>
+                                                                {isToggling ? (
+                                                                    <div className="w-3 h-3 border-2 border-gray-200 border-t-gray-700 rounded-full animate-spin shrink-0" />
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => handleToggleSubscription(email, prop.id)}
+                                                                        role="switch"
+                                                                        aria-checked={isSubscribed}
+                                                                        className={[
+                                                                            'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent',
+                                                                            'transition-colors duration-150 ease-in-out focus:outline-none',
+                                                                            isSubscribed ? 'bg-gray-900' : 'bg-gray-200',
+                                                                        ].join(' ')}
+                                                                    >
+                                                                        <span
+                                                                            className={[
+                                                                                'pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow',
+                                                                                'transform transition duration-150 ease-in-out',
+                                                                                isSubscribed ? 'translate-x-4' : 'translate-x-0',
+                                                                            ].join(' ')}
+                                                                        />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
                             );
-                        })
-                    )}
-                </div>
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );

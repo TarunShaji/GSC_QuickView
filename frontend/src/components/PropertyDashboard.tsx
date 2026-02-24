@@ -209,18 +209,17 @@ export default function PropertyDashboard() {
         URL.revokeObjectURL(url);
     };
 
+    // Previously: Promise.all([getOverview, getPages, getDevices]) — 3 simultaneous requests,
+    // each locking a DB connection, causing pool exhaustion with parallel page loads.
+    // Now: 1 HTTP request, 1 DB connection, sequential SQL, released on completion.
     const fetchAll = useCallback(async (isInitial = false) => {
         if (!propertyId || !accountId) return;
         if (isInitial) setIsLoading(true);
         try {
-            const [overviewData, pagesData, devicesData] = await Promise.all([
-                api.properties.getOverview(accountId, propertyId),
-                api.properties.getPages(accountId, propertyId),
-                api.properties.getDevices(accountId, propertyId),
-            ]);
-            setOverview(overviewData);
-            setPages(pagesData);
-            setDevices(devicesData);
+            const data = await api.properties.getAllData(accountId, propertyId);
+            setOverview(data.overview);
+            setPages(data.pages);
+            setDevices(data.devices);
         } catch (err) {
             console.error('Failed to fetch property data:', err);
         } finally {

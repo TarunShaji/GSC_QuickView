@@ -41,9 +41,11 @@ async def lifespan(app: FastAPI):
     # Use transaction mode (port 6543) on Supabase for higher concurrency.
     init_db_pool(settings.DATABASE_URL, minconn=1, maxconn=10)
     
-    # Initialize global thread pool for long-running ingestion tasks
-    # Capped at 4 concurrent runs as per requirements
-    app.state.executor = ThreadPoolExecutor(max_workers=4)
+    # Initialize global thread pool for long-running ingestion tasks.
+    # max_workers=2: With Supabase pool_size=15 and maxconn=10 for the API,
+    # each pipeline run now uses at most 1 connection at a time (scoped).
+    # 2 concurrent pipelines × 1 connection = 2. Budget is safe.
+    app.state.executor = ThreadPoolExecutor(max_workers=2)
     
     yield
     
@@ -525,6 +527,92 @@ def get_device_visibility(property_id: str, account_id: str, user_id: str = Depe
 
     return {"property_id": property_id, "devices": result["details"]}
 
+# ─── Aggregated endpoint: PropertyDashboard page ──────────────────────────────
+# Replaces: Promise.all([getOverview, getPages, getDevices]) = 3 simultaneous requests
+# Now:      1 HTTP request, 1 DB connection, sequential logic, released on exit.
+
+@api_router.get("/properties/{property_id}/all-data")
+def get_property_all_data(
+    property_id: str,
+    account_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: DatabasePersistence = Depends(get_db)
+):
+    """
+    Aggregated endpoint for the PropertyDashboard page.
+    Returns overview + pages + devices in a single DB connection.
+    Replaces 3 parallel GET requests with exactly 1.
+    """
+    validate_account_id(account_id, db)
+    validate_account_ownership(account_id, user_id, db)
+
+    property_data = db.fetch_property_by_id(account_id, property_id)
+    if not property_data:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    property_name = property_data['site_url']
+
+    # --- OVERVIEW ---
+    metrics = db.fetch_property_daily_metrics_for_overview(account_id, property_id)
+    if not metrics:
+        overview = {
+            "property_id": property_id,
+            "property_name": property_name,
+            "initialized": False,
+            "last_7_days": {"clicks": 0, "impressions": 0, "ctr": 0.0, "avg_position": 0.0, "days_with_data": 0},
+            "prev_7_days": {"clicks": 0, "impressions": 0, "ctr": 0.0, "avg_position": 0.0, "days_with_data": 0},
+            "deltas": {"clicks": 0, "impressions": 0, "clicks_pct": 0.0, "impressions_pct": 0.0, "ctr": 0.0, "ctr_pct": 0.0, "avg_position": 0.0},
+            "computed_at": None
+        }
+    else:
+        most_recent_date = get_most_recent_date(metrics)
+        last_rows, prev_rows = split_rows_by_window(metrics, most_recent_date)
+        last_7 = aggregate_metrics(last_rows)
+        prev_7 = aggregate_metrics(prev_rows)
+        overview = {
+            "property_id": property_id,
+            "property_name": property_name,
+            "initialized": True,
+            "last_7_days": {
+                "clicks": last_7["clicks"], "impressions": last_7["impressions"],
+                "ctr": round(last_7["ctr"], 4), "avg_position": round(last_7["avg_position"], 2),
+                "days_with_data": last_7["days_with_data"]
+            },
+            "prev_7_days": {
+                "clicks": prev_7["clicks"], "impressions": prev_7["impressions"],
+                "ctr": round(prev_7["ctr"], 4), "avg_position": round(prev_7["avg_position"], 2),
+                "days_with_data": prev_7["days_with_data"]
+            },
+            "deltas": {
+                "clicks": last_7["clicks"] - prev_7["clicks"],
+                "impressions": last_7["impressions"] - prev_7["impressions"],
+                "clicks_pct": safe_delta_pct(last_7["clicks"], prev_7["clicks"]),
+                "impressions_pct": safe_delta_pct(last_7["impressions"], prev_7["impressions"]),
+                "ctr": round(last_7["ctr"] - prev_7["ctr"], 4),
+                "ctr_pct": safe_delta_pct(last_7["ctr"], prev_7["ctr"]),
+                "avg_position": round(last_7["avg_position"] - prev_7["avg_position"], 2)
+            },
+            "computed_at": most_recent_date.isoformat()
+        }
+
+    # --- PAGES ---
+    page_result = PageVisibilityAnalyzer(db).analyze_property(account_id, property_data)
+    if page_result.get("insufficient_data"):
+        pages = {"property_id": property_id, "pages": {"new": [], "lost": [], "drop": [], "gain": []}, "totals": {"new": 0, "lost": 0, "drop": 0, "gain": 0}}
+    else:
+        mapped = {"new": page_result["new_pages"], "lost": page_result["lost_pages"], "drop": page_result["drops"], "gain": page_result["gains"]}
+        pages = {"property_id": property_id, "pages": mapped, "totals": {k: len(v) for k, v in mapped.items()}}
+
+    # --- DEVICES ---
+    device_result = DeviceVisibilityAnalyzer(db).analyze_property(account_id, property_data)
+    if device_result.get("insufficient_data"):
+        devices = {"property_id": property_id, "devices": {}}
+    else:
+        devices = {"property_id": property_id, "devices": device_result["details"]}
+
+    return {"overview": overview, "pages": pages, "devices": devices}
+
+
 @api_router.get("/alerts")
 def get_alerts(account_id: str, limit: int = 20, user_id: str = Depends(get_current_user_id), db: DatabasePersistence = Depends(get_db)):
     """Get recent alerts for an account."""
@@ -602,6 +690,75 @@ def get_accounts_for_user(user_id: str = Depends(get_current_user_id), db: Datab
         }
         for a in accounts
     ]
+
+
+
+
+# ─── Aggregated endpoint: AlertConfig page ─────────────────────────────────────────
+# Replaces the N+1 fan-out that was:
+#   GET /websites → Promise.all(N × GET /websites/{id}/properties)
+#   GET /alert-recipients → Promise.all(M × GET /alert-subscriptions?email=...)
+# All data is fetched in a single DB connection with 4 sequential SQL queries.
+
+@api_router.get("/alert-config-data")
+def get_alert_config_data(
+    account_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: DatabasePersistence = Depends(get_db)
+):
+    """
+    Single aggregated endpoint for the AlertConfig page.
+
+    Returns:
+      - websites: list of {id, base_domain, properties: [{id, site_url}]}
+      - recipients: list of email strings
+      - subscriptions: {email: [property_id, ...]}
+
+    Replaces 1 + N + 1 + M HTTP requests with exactly 1.
+    DB cost: 4 sequential SQL queries, 1 connection, released immediately.
+    """
+    validate_account_id(account_id, db)
+    validate_account_ownership(account_id, user_id, db)
+
+    # fetch_all_properties returns: {id, site_url, property_type, permission_level, base_domain}
+    # It JOINs websites internally, so base_domain is available directly on each property row.
+    # We don't need fetch_all_websites separately — group by base_domain in Python.
+    all_properties = db.fetch_all_properties(account_id)
+
+    # Group properties by base_domain — no website_id needed
+    props_by_domain: dict = {}
+    for prop in all_properties:
+        domain = prop["base_domain"]
+        if domain not in props_by_domain:
+            props_by_domain[domain] = []
+        props_by_domain[domain].append({
+            "id": str(prop["id"]),
+            "site_url": prop["site_url"],
+        })
+
+    websites_payload = [
+        {
+            "base_domain": domain,
+            "properties": props,
+        }
+        for domain, props in sorted(props_by_domain.items())
+    ]
+
+    # Recipients
+    recipients = db.fetch_alert_recipients(account_id)
+
+    # Subscriptions for all recipients — sequential, NOT parallel
+    subscriptions: dict = {}
+    for email in recipients:
+        property_ids = db.fetch_alert_subscriptions(account_id, email)
+        subscriptions[email] = property_ids
+
+    return {
+        "account_id": account_id,
+        "websites": websites_payload,
+        "recipients": recipients,
+        "subscriptions": subscriptions,
+    }
 
 
 @app.get("/")

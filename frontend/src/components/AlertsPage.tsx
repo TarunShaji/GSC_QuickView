@@ -27,8 +27,9 @@ export default function AlertsPage() {
     useEffect(() => {
         fetchAlerts();
 
-        // Auto-refresh every 5 seconds to show real-time email status changes
-        const interval = setInterval(fetchAlerts, 5000);
+        // Alerts change only when the pipeline runs — no need to poll faster than 30s.
+        // Old: 5000ms → 12 DB queries/min per open browser tab, even when idle.
+        const interval = setInterval(fetchAlerts, 30000);
         return () => clearInterval(interval);
     }, [fetchAlerts]);
 

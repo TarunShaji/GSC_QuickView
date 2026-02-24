@@ -76,6 +76,17 @@ export const api = {
             fetchJson<PageVisibilityResponse>(`/properties/${propertyId}/pages?account_id=${accountId}`),
         getDevices: (accountId: string, propertyId: string) =>
             fetchJson<DeviceVisibilityResponse>(`/properties/${propertyId}/devices?account_id=${accountId}`),
+        /**
+         * Aggregated endpoint for PropertyDashboard.
+         * Replaces Promise.all([getOverview, getPages, getDevices]) = 3 simultaneous requests.
+         * Returns all three in 1 HTTP request, 1 DB connection.
+         */
+        getAllData: (accountId: string, propertyId: string) =>
+            fetchJson<{
+                overview: PropertyOverview;
+                pages: PageVisibilityResponse;
+                devices: DeviceVisibilityResponse;
+            }>(`/properties/${propertyId}/all-data?account_id=${accountId}`),
     },
 
     alerts: {
@@ -104,6 +115,22 @@ export const api = {
             fetchJson<{ status: string }>(`/alert-subscriptions?account_id=${accountId}&email=${encodeURIComponent(email)}&property_id=${propertyId}`, {
                 method: 'DELETE'
             }),
+        /**
+         * Aggregated load for AlertConfig page.
+         * Replaces: GET /websites → N×GET /websites/{id}/properties +
+         *           GET /alert-recipients → M×GET /alert-subscriptions
+         * With: exactly 1 HTTP request.
+         */
+        getAlertConfigData: (accountId: string) =>
+            fetchJson<{
+                account_id: string;
+                websites: Array<{
+                    base_domain: string;
+                    properties: Array<{ id: string; site_url: string }>;
+                }>;
+                recipients: string[];
+                subscriptions: Record<string, string[]>;
+            }>(`/alert-config-data?account_id=${accountId}`),
     },
 };
 
