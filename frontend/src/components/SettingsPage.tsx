@@ -20,8 +20,8 @@ type TogglingMap = Record<string, boolean>; // `${email}__${propertyId}` → boo
 
 export default function SettingsPage() {
     const { accountId } = useParams<{ accountId: string }>();
-    // Derive the email for display from localStorage (set when account was selected)
-    const accountEmail = localStorage.getItem('gsc_email') ?? accountId ?? '';
+    // Derive the display email from localStorage (set when account was selected from the portfolio selector)
+    const accountEmail = localStorage.getItem('selected_account_email') ?? accountId ?? '';
     const navigate = useNavigate();
 
     // Recipients list

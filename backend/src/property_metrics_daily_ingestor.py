@@ -81,7 +81,7 @@ class PropertyMetricsDailyIngestor:
                     'ctr': row.get('ctr', 0.0),
                     'position': row.get('position', 0.0)
                 })
-            
+
             # Persist to database
             self.db.begin_transaction()
             counts = self.db.persist_property_metrics(property_id, property_metrics)

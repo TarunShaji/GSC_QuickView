@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../api';
-import { useAuth } from '../AuthContext';
+import { useSession } from '../SessionContext';
 import type { PipelineStatus } from '../types';
 
 interface PipelineBannerProps {
@@ -8,7 +8,7 @@ interface PipelineBannerProps {
 }
 
 export default function PipelineBanner({ onSuccess }: PipelineBannerProps) {
-    const { accountId } = useAuth();
+    const { accountId } = useSession();
     const [status, setStatus] = useState<PipelineStatus | null>(null);
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const wasRunning = useRef(false);

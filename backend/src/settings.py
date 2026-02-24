@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql://user:pass@host:port/dbname"
 
+
     # Application URLs
     FRONTEND_URL: str = "https://dashboard.yourdomain.com"
     BACKEND_URL: str = "https://api.yourdomain.com"
@@ -25,6 +26,9 @@ class Settings(BaseSettings):
     # Google OAuth
     GOOGLE_CLIENT_ID: str
     GOOGLE_CLIENT_SECRET: str
+
+    # Supabase Auth
+    SUPABASE_URL: str  # e.g. https://your-project-id.supabase.co
 
     # CORS
     ALLOWED_ORIGINS_STR: str = "https://dashboard.yourdomain.com"

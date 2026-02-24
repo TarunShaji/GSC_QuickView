@@ -102,31 +102,45 @@ class DatabasePersistence:
     # ACCOUNT & TOKEN MANAGEMENT
     # ========================================
 
-    def upsert_account(self, email: str) -> str:
+    def upsert_account(self, email: str, user_id: Optional[str] = None) -> str:
         """
         Create or update an account based on email.
-        
+        When user_id is provided (Supabase Auth flow), it is stored on the account
+        so the account can be scoped to the owning user in API queries.
+        When user_id is None (legacy / cron path), the column is left unchanged.
+
         Args:
             email: Google account email
-            
+            user_id: Supabase Auth UUID (optional)
+
         Returns:
             UUID of the account
         """
         try:
-            self.cursor.execute("""
-                INSERT INTO accounts (google_email, created_at, updated_at)
-                VALUES (%s, NOW(), NOW())
-                ON CONFLICT (google_email) DO UPDATE SET
-                    updated_at = NOW()
-                RETURNING id
-            """, (email,))
-            
+            if user_id:
+                self.cursor.execute("""
+                    INSERT INTO accounts (google_email, user_id, created_at, updated_at)
+                    VALUES (%s, %s, NOW(), NOW())
+                    ON CONFLICT (google_email) DO UPDATE SET
+                        user_id = EXCLUDED.user_id,
+                        updated_at = NOW()
+                    RETURNING id
+                """, (email, user_id))
+            else:
+                self.cursor.execute("""
+                    INSERT INTO accounts (google_email, created_at, updated_at)
+                    VALUES (%s, NOW(), NOW())
+                    ON CONFLICT (google_email) DO UPDATE SET
+                        updated_at = NOW()
+                    RETURNING id
+                """, (email,))
+
             result = self.cursor.fetchone()
             self.connection.commit()
             account_id = result['id']
-            print(f"[DB] Account upserted: {email} (id: {account_id})")
+            print(f"[DB] Account upserted: {email} (id: {account_id}, user_id: {user_id})")
             return account_id
-        
+
         except Exception as e:
             self.connection.rollback()
             print(f"[DB ERROR] Failed to upsert account: {e}")
@@ -193,13 +207,64 @@ class DatabasePersistence:
             return False
 
     def fetch_all_accounts(self) -> List[Dict[str, Any]]:
-        """Fetch all accounts for the cron dispatcher."""
+        """
+        Fetch ALL accounts — used exclusively by the cron dispatcher.
+        This query is intentionally NOT scoped by user_id.
+        The cron must see every account to run daily pipelines.
+        DO NOT ADD user_id filtering here.
+        """
         try:
             self.cursor.execute("SELECT id, google_email FROM accounts ORDER BY google_email")
             return self.cursor.fetchall()
         except psycopg2.Error as e:
             print(f"[ERROR] Failed to fetch accounts: {e}")
             raise RuntimeError(f"Database error fetching accounts: {e}") from e
+
+    def fetch_accounts_for_user(self, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetch only the accounts owned by a specific Supabase user.
+        Used by GET /api/accounts — the API-facing (user-scoped) version.
+        The cron dispatcher still uses fetch_all_accounts() above.
+
+        Args:
+            user_id: Supabase Auth UUID (payload['sub'])
+
+        Returns:
+            List of {id, google_email, data_initialized} for this user's accounts
+        """
+        try:
+            self.cursor.execute("""
+                SELECT id, google_email, data_initialized
+                FROM accounts
+                WHERE user_id = %s
+                ORDER BY google_email
+            """, (user_id,))
+            return self.cursor.fetchall()
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to fetch accounts for user {user_id}: {e}")
+            raise RuntimeError(f"Database error fetching accounts for user: {e}") from e
+
+    def verify_account_ownership(self, account_id: str, user_id: str) -> bool:
+        """
+        Check that an account belongs to the given Supabase user.
+        Use this before any write or read operation on behalf of a user.
+
+        Args:
+            account_id: UUID of the GSC account
+            user_id: Supabase Auth UUID
+
+        Returns:
+            True if the account is owned by the user, False otherwise
+        """
+        try:
+            self.cursor.execute("""
+                SELECT 1 FROM accounts
+                WHERE id = %s AND user_id = %s
+            """, (account_id, user_id))
+            return self.cursor.fetchone() is not None
+        except psycopg2.Error as e:
+            print(f"[ERROR] Failed to verify account ownership: {e}")
+            return False
 
     def upsert_gsc_token(self, account_id: str, token: GSCAuthToken) -> None:
         """

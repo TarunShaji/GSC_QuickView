@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 from collections import defaultdict
-from fastapi import FastAPI, HTTPException, APIRouter
+from fastapi import FastAPI, HTTPException, APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Dict, List, Any, Optional
@@ -10,9 +10,12 @@ from src.config.date_windows import ANALYSIS_WINDOW_DAYS, HALF_ANALYSIS_WINDOW
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
+import base64
+import json
 
 from fastapi.middleware.cors import CORSMiddleware
 from src.settings import settings
+from src.auth.supabase_auth import get_current_user_id
 
 # Import internal modules
 from src.main import run_pipeline
@@ -137,9 +140,20 @@ def validate_account_id(account_id: str, db: DatabasePersistence) -> None:
         UUID(account_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid account_id format")
-    
+
     if not db.account_exists(account_id):
         raise HTTPException(status_code=404, detail="Account not found")
+
+
+def validate_account_ownership(account_id: str, user_id: str, db: DatabasePersistence) -> None:
+    """
+    Verify that the authenticated user owns the requested account.
+    Raises 403 Forbidden if ownership check fails.
+    Called after validate_account_id so we know the account exists.
+    This does NOT change pipeline logic — pipelines always run by account_id.
+    """
+    if not db.verify_account_ownership(account_id, user_id):
+        raise HTTPException(status_code=403, detail="Access denied: account does not belong to your user")
 
 
 def serialize_for_json(obj):
@@ -174,33 +188,45 @@ def health_check():
 # -------------------------------------------------------------------------
 
 @api_router.get("/auth/google/url")
-def get_auth_url():
+def get_auth_url(user_id: str = Depends(get_current_user_id)):
     """
-    Generate the Google OAuth authorization URL.
-    The redirect_uri is controlled by the backend (auth_handler.py).
+    Generate the Google OAuth authorization URL for connecting a GSC account.
+    Requires: authenticated Supabase user (Bearer JWT).
+    The user_id is encoded in the OAuth state param so the callback can
+    attribute the newly connected GSC account to the correct user.
     """
     db = DatabasePersistence()
     try:
         handler = GoogleAuthHandler(db)
-        url = handler.get_authorization_url()
+        url = handler.get_authorization_url(user_id=user_id)
         return {"url": url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/auth/google/callback")
-def auth_callback(code: str):
+def auth_callback(code: str, state: str = ""):
     """
-    Handle the OAuth 2.0 callback DIRECTLY from Google.
+    Handle the OAuth 2.0 callback from Google.
     Exchanges code for tokens, stores in DB, and redirects to frontend.
+    The `state` param carries the base64-encoded Supabase user_id so we can
+    link the new GSC account to the right user.
     """
     db = DatabasePersistence()
     db.connect()
     try:
+        # Decode user_id from state (set during /auth/google/url)
+        linked_user_id: Optional[str] = None
+        if state:
+            try:
+                state_data = json.loads(base64.urlsafe_b64decode(state + "==").decode())
+                linked_user_id = state_data.get("user_id")
+            except Exception:
+                pass  # If state is malformed, proceed without user_id
+
         handler = GoogleAuthHandler(db)
-        account_id, email = handler.handle_callback(code)
+        account_id, email = handler.handle_callback(code, user_id=linked_user_id)
         db.disconnect()
-        
-        # 🔗 Use dynamic frontend URL from settings
+
         return RedirectResponse(url=f"{settings.FRONTEND_URL}/?account_id={account_id}&email={email}")
     except Exception as e:
         db.disconnect()
@@ -226,43 +252,40 @@ def run_pipeline_wrapper(account_id: str, run_id: str):
         instance_active_runs.discard((account_id, run_id))
 
 @api_router.post("/pipeline/run")
-def run_pipeline_endpoint(account_id: str):
+def run_pipeline_endpoint(account_id: str, user_id: str = Depends(get_current_user_id)):
     """
     Execute the full GSC analytics pipeline for a specific account.
-    Dispatched to a global ThreadPoolExecutor to isolate from request lifecycle.
+    Requires: authenticated user who owns the account.
+    Dispatched to a global ThreadPoolExecutor.
     """
     db = DatabasePersistence()
     db.connect()
     try:
         validate_account_id(account_id, db)
-        # 1. Try to start the run synchronously to catch concurrency issues early
-        # This will fail with IntegrityError if already running (via DB index).
+        validate_account_ownership(account_id, user_id, db)
         run_id = db.start_pipeline_run(account_id)
-        
-        # 2. Trigger background task via global ThreadPoolExecutor
         app.state.executor.submit(run_pipeline_wrapper, account_id, run_id)
-        
         return {"status": "started", "account_id": account_id, "run_id": run_id}
     except RuntimeError as e:
         if "already running" in str(e).lower():
             raise HTTPException(status_code=409, detail="Pipeline is already running for this account")
         raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
-        # Log unexpected errors
         print(f"[ERROR] Failed to dispatch pipeline for {account_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error during pipeline dispatch")
     finally:
         db.disconnect()
 
 @api_router.get("/pipeline/status")
-def get_pipeline_status(account_id: str):
-    """
-    Get current pipeline execution status for an account from the database.
-    """
+def get_pipeline_status(account_id: str, user_id: str = Depends(get_current_user_id)):
+    """Get current pipeline execution status for an account."""
     db = DatabasePersistence()
     db.connect()
     try:
         validate_account_id(account_id, db)
+        validate_account_ownership(account_id, user_id, db)
         state = db.fetch_pipeline_state(account_id)
         if not state:
             return {"is_running": False, "account_id": account_id}
@@ -276,36 +299,39 @@ def get_pipeline_status(account_id: str):
 # -------------------------------------------------------------------------
 
 @api_router.get("/websites")
-def get_websites(account_id: str):
-    """Get all websites for an account"""
+def get_websites(account_id: str, user_id: str = Depends(get_current_user_id)):
+    """Get all websites for an account."""
     db = DatabasePersistence()
     db.connect()
     try:
         validate_account_id(account_id, db)
+        validate_account_ownership(account_id, user_id, db)
         websites = db.fetch_all_websites(account_id)
         return [serialize_row(w) for w in websites]
     finally:
         db.disconnect()
 
 @api_router.get("/websites/{website_id}/properties")
-def get_properties_by_website(website_id: str, account_id: str):
-    """Get all properties for a website within an account"""
+def get_properties_by_website(website_id: str, account_id: str, user_id: str = Depends(get_current_user_id)):
+    """Get all properties for a website within an account."""
     db = DatabasePersistence()
     db.connect()
     try:
         validate_account_id(account_id, db)
+        validate_account_ownership(account_id, user_id, db)
         properties = db.fetch_properties_by_website(account_id, website_id)
         return [serialize_row(p) for p in properties]
     finally:
         db.disconnect()
 
 @api_router.get("/properties/{property_id}/overview")
-def get_property_overview(property_id: str, account_id: str):
-    """Get property overview with 7v7 comparison including CTR and Position"""
+def get_property_overview(property_id: str, account_id: str, user_id: str = Depends(get_current_user_id)):
+    """Get property overview with 7v7 comparison including CTR and Position."""
     db = DatabasePersistence()
     db.connect()
     try:
         validate_account_id(account_id, db)
+        validate_account_ownership(account_id, user_id, db)
         # Fetch property metadata to get site_url (property_name)
         prop = db.fetch_property_by_id(account_id, property_id)
         if not prop:
@@ -444,15 +470,16 @@ def classify_property_health(
     return "healthy"
 
 @api_router.get("/dashboard-summary")
-def get_dashboard_summary(account_id: str):
+def get_dashboard_summary(account_id: str, user_id: str = Depends(get_current_user_id)):
     """
     Get dashboard summary with website-grouped property health status.
-    Computes 7v7 health metrics for all properties.
+    Requires authenticated user who owns the account.
     """
     db = DatabasePersistence()
     db.connect()
     try:
         validate_account_id(account_id, db)
+        validate_account_ownership(account_id, user_id, db)
         # Check if account data has been initialized
         if not db.is_account_data_initialized(account_id):
             return {
@@ -699,15 +726,17 @@ def remove_alert_subscription(account_id: str, email: str, property_id: str):
 
 
 @api_router.get("/accounts")
-def get_all_accounts():
+def get_accounts_for_user(user_id: str = Depends(get_current_user_id)):
     """
-    Return a lightweight list of all accounts for the master selector page.
-    Returns: id, google_email, data_initialized for each account.
+    Return accounts belonging to the authenticated Supabase user.
+    Requires: Bearer JWT in Authorization header.
+    Scoped by user_id — users only see their own accounts.
+    Note: The cron dispatcher uses db.fetch_all_accounts() (unscoped) separately.
     """
     db = DatabasePersistence()
     db.connect()
     try:
-        accounts = db.fetch_all_accounts()
+        accounts = db.fetch_accounts_for_user(user_id)
         return [
             {
                 "id": str(a["id"]),
