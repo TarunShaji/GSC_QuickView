@@ -45,6 +45,25 @@ def close_db_pool():
         _db_pool = None
 
 
+def get_db():
+    """
+    FastAPI dependency: borrow a connection from the pool, yield the
+    DatabasePersistence instance, then guarantee the connection is returned
+    to the pool regardless of whether the endpoint raised an exception.
+
+    Usage:
+        @router.get("/something")
+        def my_endpoint(db: DatabasePersistence = Depends(get_db)):
+            ...
+    """
+    db = DatabasePersistence()
+    db.connect()
+    try:
+        yield db
+    finally:
+        db.disconnect()
+
+
 class DatabasePersistence:
     """Handles database operations for websites and properties"""
 
